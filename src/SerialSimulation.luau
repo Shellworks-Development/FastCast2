@@ -1273,12 +1273,11 @@ function SerialSimulation:FireQueuedEvents(
 				continue
 			end
 
-			local config =
-				casts_FastCastEventsConfig[castID]
+			local config = casts_FastCastEventsConfig[castID]
 
-			if event.eventType
-				== "LengthChanged"
-			then
+			local eventType = event.eventType
+
+			if eventType == "LengthChanged" then
 
 				if config
 					and config.UseLengthChanged
@@ -1291,9 +1290,7 @@ function SerialSimulation:FireQueuedEvents(
 					)
 				end
 
-			elseif event.eventType
-				== "Hit"
-			then
+			elseif eventType == "Hit" then
 
 				if config
 					and config.UseHit
@@ -1306,9 +1303,7 @@ function SerialSimulation:FireQueuedEvents(
 					)
 				end
 
-			elseif event.eventType
-				== "Pierced"
-			then
+			elseif eventType == "Pierced" then
 
 				if config
 					and config.UsePierced
@@ -1321,9 +1316,7 @@ function SerialSimulation:FireQueuedEvents(
 					)
 				end
 
-			elseif event.eventType
-				== "CastTerminating"
-			then
+			elseif eventType == "CastTerminating" then
 
 				self.BaseCastRef:_TerminateCast(
 					castID,
