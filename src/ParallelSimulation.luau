@@ -796,8 +796,7 @@ local function ResimulateHit(
 			acceleration
 		)
 
-		local subDirection =
-			subVelocity * timeIncrement
+		local subDirection = subVelocity * timeIncrement
 
 		local subResult = castHandler(
 			targetWorldRoot,
@@ -884,8 +883,7 @@ local function SimulateCast(
 	local initialVelocity = trajectory.InitialVelocity
 	local acceleration = trajectory.Acceleration
 
-	local previousTime =
-		casts_TotalRunTime[id] - trajectory.StartTime
+	local previousTime = casts_TotalRunTime[id] - trajectory.StartTime
 
 	local lastPoint = GetPositionAtTime(
 		previousTime,
@@ -896,8 +894,7 @@ local function SimulateCast(
 
 	casts_TotalRunTime[id] += delta
 
-	local currentTime =
-		casts_TotalRunTime[id] - trajectory.StartTime
+	local currentTime = casts_TotalRunTime[id] - trajectory.StartTime
 
 	local currentPoint = GetPositionAtTime(
 		currentTime,
@@ -929,8 +926,7 @@ local function SimulateCast(
 		and result.Position
 		or currentPoint
 
-	local rayDisplacement =
-		(hitPoint - lastPoint).Magnitude
+	local rayDisplacement = (hitPoint - lastPoint).Magnitude
 
 	casts_RayDisplacement[id] = rayDisplacement
 
@@ -998,8 +994,7 @@ local function SimulateCast(
 		return
 	end
 
-	local canPierce, castTerminatingfn =
-		GetEventCallbacks(id)
+	local canPierce, castTerminatingfn = GetEventCallbacks(id)
 
 	-- ------------------------------------------------------------------------
 	-- Pierce.
@@ -1085,8 +1080,7 @@ local function SimulateAlwaysHighFidelity(
 	fastCastEvents: TypeDef.FastCastEvents?
 )
 	if casts_IsActivelyResimulating[id] then
-		local _, terminating =
-			GetEventCallbacks(id)
+		local _, terminating = GetEventCallbacks(id)
 
 		QueueEvent(
 			id,
@@ -1114,8 +1108,7 @@ local function SimulateAlwaysHighFidelity(
 	local initialVelocity = trajectory.InitialVelocity
 	local acceleration = trajectory.Acceleration
 
-	local currentTime =
-		casts_TotalRunTime[id] - trajectory.StartTime
+	local currentTime = casts_TotalRunTime[id] - trajectory.StartTime
 
 	local lastPoint = GetPositionAtTime(
 		currentTime,
@@ -1128,8 +1121,7 @@ local function SimulateAlwaysHighFidelity(
 	-- the approximate distance for this frame.
 	casts_TotalRunTime[id] += delta
 
-	local nextTime =
-		casts_TotalRunTime[id] - trajectory.StartTime
+	local nextTime = casts_TotalRunTime[id] - trajectory.StartTime
 
 	local currentPoint = GetPositionAtTime(
 		nextTime,
@@ -1144,8 +1136,7 @@ local function SimulateAlwaysHighFidelity(
 		acceleration
 	)
 
-	local totalDisplacement =
-		currentPoint - lastPoint
+	local totalDisplacement = currentPoint - lastPoint
 
 	local direction =
 		totalDisplacement.Unit
@@ -1154,7 +1145,7 @@ local function SimulateAlwaysHighFidelity(
 
 	local handler = castHandlers[variant.CastType]
 
-	local broadResult = handler(
+	local resultOfCast = handler(
 		rayInfo.WorldRoot,
 		lastPoint,
 		direction,
@@ -1163,12 +1154,11 @@ local function SimulateAlwaysHighFidelity(
 	)
 
 	local endpoint =
-		broadResult
-		and broadResult.Position
+		resultOfCast
+		and resultOfCast.Position
 		or currentPoint
 
-	local distance =
-		(endpoint - lastPoint).Magnitude
+	local distance = (endpoint - lastPoint).Magnitude
 
 	casts_TotalRunTime[id] -= delta
 
@@ -1180,8 +1170,7 @@ local function SimulateAlwaysHighFidelity(
 		)
 	)
 
-	local timeIncrement =
-		delta / segmentCount
+	local timeIncrement = delta / segmentCount
 
 	if DebugLogging.Calculation then
 		print(
@@ -1476,14 +1465,11 @@ local function UpdateCasts(delta: number)
 		local cast = ActivesRef[id]
 
 		if cast then
-			cast.StateInfo.TotalRuntime =
-				casts_TotalRunTime[id]
+			cast.StateInfo.TotalRuntime = casts_TotalRunTime[id]
 
-			cast.StateInfo.DistanceCovered =
-				casts_DistanceCovered[id]
+			cast.StateInfo.DistanceCovered = casts_DistanceCovered[id]
 
-			cast.CFrame =
-				casts_CFrame[id]
+			cast.CFrame = casts_CFrame[id]
 		end
 	end
 
