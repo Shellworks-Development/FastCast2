@@ -1355,29 +1355,21 @@ function SerialSimulation:Register(
 	casts_IsActivelyResimulating[id] = false
 	casts_CancelHighResCast[id] = false
 
-	casts_Trajectory[id] =
-		cast.StateInfo.Trajectory
+	casts_Trajectory[id] = cast.StateInfo.Trajectory
 
-	casts_FastCastEventsConfig[id] =
-		cast.StateInfo.FastCastEventsConfig
+	casts_FastCastEventsConfig[id] = cast.StateInfo.FastCastEventsConfig
 
-	casts_VisualizeCasts[id] =
-		cast.StateInfo.VisualizeCasts
+	casts_VisualizeCasts[id] = cast.StateInfo.VisualizeCasts
 
-	casts_VisualizeCastSettings[id] =
-		cast.StateInfo.VisualizeCastSettings
+	casts_VisualizeCastSettings[id] = cast.StateInfo.VisualizeCastSettings
 
-	casts_RayInfo[id] =
-		cast.RayInfo
+	casts_RayInfo[id] = cast.RayInfo
 
-	casts_UserData[id] =
-		cast.UserData
+	casts_UserData[id] = cast.UserData
 
-	casts_CastType[id] =
-		cast.CastVariant.CastType
+	casts_CastType[id] = cast.CastVariant.CastType
 
-	casts_CastVariant[id] =
-		cast.CastVariant
+	casts_CastVariant[id] = cast.CastVariant
 
 	casts_MaxDistance[id] =
 		cast.RayInfo.MaxDistance
@@ -1388,11 +1380,9 @@ function SerialSimulation:Register(
 		id
 	)
 
-	self.casts_ID_Index[id] =
-		#self.casts_ID
+	self.casts_ID_Index[id] = #self.casts_ID
 
-	local trajectory =
-		casts_Trajectory[id]
+	local trajectory = casts_Trajectory[id]
 
 	local position =
 		GetPositionAtTime(
@@ -1402,11 +1392,9 @@ function SerialSimulation:Register(
 			trajectory.Acceleration
 		)
 
-	casts_CFrame[id] =
-		CFrame.new(position)
+	casts_CFrame[id] = CFrame.new(position)
 
-	cast.CFrame =
-		casts_CFrame[id]
+	cast.CFrame = casts_CFrame[id]
 
 	queuedEvents[id] = {}
 end
