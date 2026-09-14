@@ -520,6 +520,12 @@ function SerialSimulation:FireQueuedVisualizes(
 			continue
 		end
 
+		local settings = casts_VisualizeCastSettings[castID]
+
+		if not settings then
+			return
+		end
+
 		for _, data in list do
 
 			if data.atCF then
@@ -528,35 +534,27 @@ function SerialSimulation:FireQueuedVisualizes(
 					and not data.wasPierce
 					and not data.sub
 				then
-					print(
-						"Hit was successful. Terminating."
-					)
+					print("Hit was successful. Terminating.")
 				end
 
 				if DebugLogging.Pierced
 					and data.wasPierce
 					and not data.sub
 				then
-					print(
-						"Piercing function returned TRUE."
-					)
+					print("Piercing function returned TRUE.")
 				end
 
 				VisualizeHit(
 					data.atCF,
 					data.wasPierce,
-					casts_VisualizeCastSettings[castID]
+					settings
 				)
 
 				continue
 			end
 
-			if DebugLogging.Segment
-				and data.sub
-			then
-				print(
-					"Subcast visualization"
-				)
+			if DebugLogging.Segment and data.sub then
+				print("Subcast visualization")
 			end
 
 			local castType = casts_CastType[castID]
@@ -569,38 +567,23 @@ function SerialSimulation:FireQueuedVisualizes(
 
 			local variant: CastVisualizerVariants
 
-			if castType
-				== EnumCastTypes.Raycast
-			then
-
+			if castType == EnumCastTypes.Raycast then
 				variant = {
-					castLength =
-						casts_RayDisplacement[castID]
-						or 1,
+					castLength = casts_RayDisplacement[castID] or 1
 				}
-
-			elseif castType
-				== EnumCastTypes.Blockcast
-			then
-
+			elseif castType == EnumCastTypes.Blockcast then
 				variant = {
-					size =
-						(casts_CastVariant[castID]
-							:: BlockcastVariant).Size,
+					size = (casts_CastVariant[castID] :: BlockcastVariant).Size
 				}
-
 			else
-
 				variant = {
-					radius =
-						(casts_CastVariant[castID]
-							:: SpherecastVariant).Radius,
+					radius = (casts_CastVariant[castID] :: SpherecastVariant).Radius
 				}
 			end
 
 			visualizer(
 				data.castStartCFrame,
-				casts_VisualizeCastSettings[castID],
+				settings,
 				variant
 			)
 		end

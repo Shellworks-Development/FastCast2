@@ -360,11 +360,17 @@ local function FireQueuedVisualizes(
 		for _, data in list do
 			-- Hit visualization
 			if data.atCF then
-				if DebugLogging.Hit and not data.wasPierce and not data.sub then
+				if DebugLogging.Hit 
+					and not data.wasPierce 
+					and not data.sub 
+				then
 					print("Hit was successful. Terminating.")
 				end
 
-				if DebugLogging.Pierced and data.wasPierce and not data.sub then
+				if DebugLogging.Pierced 
+					and data.wasPierce 
+					and not data.sub 
+				then
 					print("Piercing function returned TRUE to pierce this part.")
 				end
 
