@@ -382,6 +382,101 @@ function SerialSimulation:QueueEvent(
 	)
 end
 
+function SerialSimulation:FireQueuedEvents(
+	unFiredEvents
+)
+
+	local sortedIDs = {}
+
+	for id in unFiredEvents do
+		table.insert(
+			sortedIDs,
+			id
+		)
+	end
+
+	table.sort(sortedIDs)
+
+	for _, castID in sortedIDs do
+
+		local events =
+			unFiredEvents[castID]
+
+		if not events then
+			continue
+		end
+
+		for _, event in events do
+
+			local cast =
+				self.ActivesRef[castID]
+
+			if not cast then
+				continue
+			end
+
+			local config = casts_FastCastEventsConfig[castID]
+
+			local eventType = event.eventType
+
+			if eventType == "LengthChanged" then
+
+				if config
+					and config.UseLengthChanged
+					and self.Events.LengthChanged
+				then
+
+					self.Events.LengthChanged(
+						cast,
+						table.unpack(event.args)
+					)
+				end
+
+			elseif eventType == "Hit" then
+
+				if config
+					and config.UseHit
+					and self.Events.Hit
+				then
+
+					self.Events.Hit(
+						cast,
+						table.unpack(event.args)
+					)
+				end
+
+			elseif eventType == "Pierced" then
+
+				if config
+					and config.UsePierced
+					and self.Events.Pierced
+				then
+
+					self.Events.Pierced(
+						cast,
+						table.unpack(event.args)
+					)
+				end
+
+			elseif eventType == "CastTerminating" then
+
+				self.BaseCastRef:_TerminateCast(
+					castID,
+					self.Events.CastTerminating
+				)
+
+				self:Unregister(
+					castID
+				)
+			end
+		end
+	end
+end
+
+-- ============================================================================
+-- Queued visualization
+-- ============================================================================
+
 function SerialSimulation:QueueVisualize(
 	castID: number,
 	data: QueuedVisualizeCastData | QueuedVisualizeHitData
@@ -400,99 +495,6 @@ function SerialSimulation:QueueVisualize(
 		data
 	)
 end
-
----------------------------------------------------------------------
--- Event Helpers
----------------------------------------------------------------------
-
-function SerialSimulation:QueueLengthChanged(
-	id: number,
-	segment: SegmentData,
-	distance: number
-)
-
-	local rayDirection
-
-	if segment.displacement.Magnitude > 0 then
-		rayDirection = segment.displacement.Unit
-	else
-		rayDirection = Vector3.zero
-	end
-
-	local cosmeticBullet =
-		casts_RayInfo[id].CosmeticBulletObject
-
-	self:QueueEvent(
-		id,
-		"LengthChanged",
-		segment.lastPoint,
-		rayDirection,
-		distance,
-		segment.velocity,
-		cosmeticBullet
-	)
-end
-
-function SerialSimulation:QueueHit(
-	id: number,
-	result: RaycastResult,
-	velocity: Vector3,
-	sub: boolean
-)
-
-	self:QueueEvent(
-		id,
-		"Hit",
-		result,
-		velocity,
-		casts_RayInfo[id].CosmeticBulletObject
-	)
-
-	self:QueueVisualize(
-		id,
-		{
-			atCF = CFrame.new(result.Position),
-			wasPierce = false,
-			sub = sub,
-		}
-	)
-end
-
-function SerialSimulation:QueuePierce(
-	id: number,
-	result: RaycastResult,
-	velocity: Vector3,
-	sub: boolean
-)
-
-	self:QueueEvent(
-		id,
-		"Pierced",
-		result,
-		velocity,
-		casts_RayInfo[id].CosmeticBulletObject
-	)
-
-	self:QueueVisualize(
-		id,
-		{
-			atCF = CFrame.new(result.Position),
-			wasPierce = true,
-			sub = sub,
-		}
-	)
-end
-
-function SerialSimulation:QueueTermination(id: number)
-	self:QueueEvent(
-		id,
-		"CastTerminating"
-	)
-end
-
----------------------------------------------------------------------
--- Event Dispatch
----------------------------------------------------------------------
 
 function SerialSimulation:FireQueuedVisualizes(
 	unFiredVisualizes
@@ -605,95 +607,93 @@ function SerialSimulation:FireQueuedVisualizes(
 	end
 end
 
-function SerialSimulation:FireQueuedEvents(
-	unFiredEvents
+---------------------------------------------------------------------
+-- Event Helpers
+---------------------------------------------------------------------
+
+function SerialSimulation:QueueLengthChanged(
+	id: number,
+	segment: SegmentData,
+	distance: number
 )
 
-	local sortedIDs = {}
+	local rayDirection
 
-	for id in unFiredEvents do
-		table.insert(
-			sortedIDs,
-			id
-		)
+	if segment.displacement.Magnitude > 0 then
+		rayDirection = segment.displacement.Unit
+	else
+		rayDirection = Vector3.zero
 	end
 
-	table.sort(sortedIDs)
+	local cosmeticBullet =
+		casts_RayInfo[id].CosmeticBulletObject
 
-	for _, castID in sortedIDs do
+	self:QueueEvent(
+		id,
+		"LengthChanged",
+		segment.lastPoint,
+		rayDirection,
+		distance,
+		segment.velocity,
+		cosmeticBullet
+	)
+end
 
-		local events =
-			unFiredEvents[castID]
+function SerialSimulation:QueueHit(
+	id: number,
+	result: RaycastResult,
+	velocity: Vector3,
+	sub: boolean
+)
 
-		if not events then
-			continue
-		end
+	self:QueueEvent(
+		id,
+		"Hit",
+		result,
+		velocity,
+		casts_RayInfo[id].CosmeticBulletObject
+	)
 
-		for _, event in events do
+	self:QueueVisualize(
+		id,
+		{
+			atCF = CFrame.new(result.Position),
+			wasPierce = false,
+			sub = sub,
+		}
+	)
+end
 
-			local cast =
-				self.ActivesRef[castID]
+function SerialSimulation:QueuePierce(
+	id: number,
+	result: RaycastResult,
+	velocity: Vector3,
+	sub: boolean
+)
 
-			if not cast then
-				continue
-			end
+	self:QueueEvent(
+		id,
+		"Pierced",
+		result,
+		velocity,
+		casts_RayInfo[id].CosmeticBulletObject
+	)
 
-			local config = casts_FastCastEventsConfig[castID]
+	self:QueueVisualize(
+		id,
+		{
+			atCF = CFrame.new(result.Position),
+			wasPierce = true,
+			sub = sub,
+		}
+	)
+end
 
-			local eventType = event.eventType
-
-			if eventType == "LengthChanged" then
-
-				if config
-					and config.UseLengthChanged
-					and self.Events.LengthChanged
-				then
-
-					self.Events.LengthChanged(
-						cast,
-						table.unpack(event.args)
-					)
-				end
-
-			elseif eventType == "Hit" then
-
-				if config
-					and config.UseHit
-					and self.Events.Hit
-				then
-
-					self.Events.Hit(
-						cast,
-						table.unpack(event.args)
-					)
-				end
-
-			elseif eventType == "Pierced" then
-
-				if config
-					and config.UsePierced
-					and self.Events.Pierced
-				then
-
-					self.Events.Pierced(
-						cast,
-						table.unpack(event.args)
-					)
-				end
-
-			elseif eventType == "CastTerminating" then
-
-				self.BaseCastRef:_TerminateCast(
-					castID,
-					self.Events.CastTerminating
-				)
-
-				self:Unregister(
-					castID
-				)
-			end
-		end
-	end
+function SerialSimulation:QueueTermination(id: number)
+	self:QueueEvent(
+		id,
+		"CastTerminating"
+	)
 end
 
 ---------------------------------------------------------------------
