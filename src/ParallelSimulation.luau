@@ -1538,11 +1538,9 @@ function ParallelSimulation.Start()
 	end
 
 	if RS:IsClient() then
-		ParallelSimulation.Connection =
-			RS.PreSimulation:ConnectParallel(UpdateCasts)
+		ParallelSimulation.Connection = RS.PreSimulation:ConnectParallel(UpdateCasts)
 	else
-		ParallelSimulation.Connection =
-			RS.Heartbeat:ConnectParallel(UpdateCasts)
+		ParallelSimulation.Connection = RS.Heartbeat:ConnectParallel(UpdateCasts)
 	end
 end
 
