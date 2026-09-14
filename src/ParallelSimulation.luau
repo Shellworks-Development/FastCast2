@@ -50,8 +50,8 @@ type SphereVisualizerVariant = {
 
 type CastVisualizerVariants =
 	RayVisualizerVariant
-| BlockVisualizerVariant
-| SphereVisualizerVariant
+	| BlockVisualizerVariant
+	| SphereVisualizerVariant
 
 type QueuedEventData = {
 	eventType: string,
@@ -464,16 +464,14 @@ local function FireQueuedEvents(
 			local caster = cast.Caster
 			local args = event.args
 
-			local moduleConfig =
-				casts_FastCastEventsModuleConfig[castID]
+			local moduleConfig = casts_FastCastEventsModuleConfig[castID]
 
-			local eventConfig =
-				casts_FastCastEventsConfig[castID]
+			local eventConfig = casts_FastCastEventsConfig[castID]
 
-			local fastCastEvents =
-				casts_FastCastEvents[castID]
+			local fastCastEvents = casts_FastCastEvents[castID]
+			local eventType = event.eventType
 
-			if event.eventType == "LengthChanged" then
+			if eventType == "LengthChanged" then
 				local lastPoint = args[1]
 				local rayDirection = args[2]
 				local displacement = args[3]
@@ -507,7 +505,7 @@ local function FireQueuedEvents(
 					)
 				end
 
-			elseif event.eventType == "Hit" then
+			elseif eventType == "Hit" then
 				local result = args[1]
 				local velocity = args[2]
 				local cosmetic = args[3]
@@ -535,7 +533,7 @@ local function FireQueuedEvents(
 					)
 				end
 
-			elseif event.eventType == "Pierced" then
+			elseif eventType == "Pierced" then
 				local result = args[1]
 				local velocity = args[2]
 				local cosmetic = args[3]
@@ -563,7 +561,7 @@ local function FireQueuedEvents(
 					)
 				end
 
-			elseif event.eventType == "CastTerminating" then
+			elseif eventType == "CastTerminating" then
 				local callback = args[1]
 
 				if cast._Destroying then
