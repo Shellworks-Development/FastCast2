@@ -1,16 +1,6 @@
 --[[
-	SerialSimulation.luau
-	FastCast2
-
-	Refactored preview.
-
-	Main goals:
-	- Keep simulation flow readable.
-	- Isolate collision resolution.
-	- Isolate high-fidelity resimulation.
-	- Centralize Hit/Pierced/Terminating events.
-	- Avoid deeply nested if/else chains.
-	- Keep SerialSimulation API compatible.
+	- Author: Mawin_CK
+	- Date: 2026
 ]]
 
 --!native

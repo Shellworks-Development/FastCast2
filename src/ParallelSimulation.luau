@@ -1,6 +1,5 @@
 --[[
 	- Author: Mawin CK
-	- Refactored ParallelSimulation
 	- Date: 2026
 ]]
 
