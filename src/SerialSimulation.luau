@@ -1190,11 +1190,9 @@ function SerialSimulation:FireQueuedVisualizes(
 				)
 			end
 
-			local castType =
-				casts_CastType[castID]
+			local castType = casts_CastType[castID]
 
-			local visualizer =
-				Visualizers[castType]
+			local visualizer = Visualizers[castType]
 
 			if not visualizer then
 				continue
@@ -1341,8 +1339,7 @@ function SerialSimulation:Register(
 
 	local id = cast.ID
 
-	casts_TotalRunTime[id] =
-		cast.StateInfo.TotalRuntime or 0
+	casts_TotalRunTime[id] = cast.StateInfo.TotalRuntime or 0
 
 	casts_DistanceCovered[id] = 0
 
@@ -1672,11 +1669,9 @@ function SerialSimulation.new()
 
 	self.Connection = nil
 
-	self.CurrentMovementMode =
-		"BulkMoveTo"
+	self.CurrentMovementMode = "BulkMoveTo"
 
-	self.MovementEnabled =
-		true
+	self.MovementEnabled = true
 
 	self.Events = {}
 
@@ -1694,14 +1689,11 @@ function SerialSimulation:Init(
 	events: TypeDef.FastCastEvents
 )
 
-	self.BaseCastRef =
-		baseCastRef
+	self.BaseCastRef = baseCastRef
 
-	self.ActivesRef =
-		baseCastRef.Actives
+	self.ActivesRef = baseCastRef.Actives
 
-	self.Events =
-		events
+	self.Events = events
 end
 
 ---------------------------------------------------------------------
