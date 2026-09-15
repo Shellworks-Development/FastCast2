@@ -73,7 +73,7 @@ function BaseCast.Init(events: any, Data: any)
 		Motor6DCacheInstance = Motor6DCache.new()
 	end
 
-	SerialSimulation.Init(BaseCast, events)
+	SerialSimulation.Init(BaseCast, Actives, events)
 
 	SerialSimulation.SetMovementModeEnabled(true, CurrentMovementMode)
 

@@ -1391,7 +1391,7 @@ local SerialSimulation = {}
 
 SerialSimulation.Connection = nil :: RBXScriptConnection?
 
-function SerialSimulation.Init(baseCastRef: any, events: TypeDef.FastCastEvents)
+function SerialSimulation.Init(baseCastRef: any, Actives: any, events: TypeDef.FastCastEvents)
 	if ActivesRef ~= nil then
 		warn(
 			"[FastCast2] SerialSimulation already initialized. Skipping."
@@ -1401,7 +1401,7 @@ function SerialSimulation.Init(baseCastRef: any, events: TypeDef.FastCastEvents)
 	end
 
 	BaseCastRef = baseCastRef
-	ActivesRef = baseCastRef.Actives
+	ActivesRef = Actives
 
 	FastCastEvents = events
 end
