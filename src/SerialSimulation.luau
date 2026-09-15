@@ -1307,8 +1307,46 @@ local function SetMovementModeEnabled(
 	enabled: boolean,
 	mode: "BulkMoveTo" | "Motor6D"
 )
+	local oldMode = CurrentMovementMode
+
 	CurrentMovementMode = mode
 	MovementEnabled = enabled
+
+	if oldMode == "Motor6D"
+		and mode ~= "Motor6D"
+	then
+		for id, motor6d in casts_ActiveMotor6Ds do
+			if BaseCastRef
+				and BaseCastRef._ReturnMotor6D
+			then
+				BaseCastRef:_ReturnMotor6D(motor6d)
+			end
+
+			casts_ActiveMotor6Ds[id] = nil
+		end
+	end
+
+	if mode == "Motor6D"
+		and enabled
+		and oldMode ~= "Motor6D"
+	then
+		for _, id in casts_ID do
+			if casts_ActiveMotor6Ds[id] then
+				continue
+			end
+
+			local cosmetic =
+				casts_RayInfo[id].CosmeticBulletObject
+
+			if cosmetic
+				and BaseCastRef
+				and BaseCastRef._GetMotor6D
+			then
+				casts_ActiveMotor6Ds[id] =
+					BaseCastRef:_GetMotor6D(cosmetic)
+			end
+		end
+	end
 end
 
 -- ============================================================================
@@ -1330,8 +1368,6 @@ local function UpdateCasts(delta: number)
 		if casts_HighFidelitySegmentSize[id] <= 0 then
 			casts_HighFidelitySegmentSize[id] = 0.1
 		end
-
-		local fastCastEvents = casts_FastCastEvents[id]
 
 		local behavior = casts_HighFidelityBehavior[id]
 
