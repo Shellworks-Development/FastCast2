@@ -686,11 +686,9 @@ function SerialSimulation:ResolveHighFidelityCollision(
 	local trajectory = casts_Trajectory[id]
 	local rayInfo = casts_RayInfo[id]
 
-	local castHandler =
-		castHandlers[casts_CastVariant[id].CastType]
+	local castHandler = castHandlers[casts_CastVariant[id].CastType]
 
-	local distance =
-		(initialResult.Position - segment.lastPoint).Magnitude
+	local distance = (initialResult.Position - segment.lastPoint).Magnitude
 
 	local segmentCount =
 		self:CalculateHighFidelitySegments(
@@ -1012,8 +1010,7 @@ function SerialSimulation:SimulateCast(
 	local rayInfo = casts_RayInfo[id]
 	local variant = casts_CastVariant[id]
 
-	local castHandler =
-		castHandlers[variant.CastType]
+	local castHandler = castHandlers[variant.CastType]
 
 	local result =
 		castHandler(
