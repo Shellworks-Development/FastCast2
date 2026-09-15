@@ -124,6 +124,8 @@ local BaseCastRef: any = nil
 local CurrentMovementMode: "BulkMoveTo" | "Motor6D" = "BulkMoveTo"
 local MovementEnabled = false
 
+local FastCastEvents: {[string]: (any) -> ()} = {}
+
 -- ============================================================================
 -- Math
 -- ============================================================================
@@ -482,15 +484,18 @@ local function FireQueuedEvents(
 				local cosmetic = args[5]
 
 				if eventConfig and eventConfig.UseLengthChanged then
-					caster.Output:Fire(
-						"LengthChanged",
-						cast,
-						lastPoint,
-						rayDirection,
-						displacement,
-						velocity,
-						cosmetic
-					)
+
+					local lengthChanged = FastCastEvents.LengthChanged
+					if lengthChanged then
+						lengthChanged(
+							cast,
+							lastPoint,
+							rayDirection,
+							displacement,
+							velocity,
+							cosmetic
+						)
+					end
 				end
 
 			elseif eventType == "Hit" then
@@ -499,13 +504,16 @@ local function FireQueuedEvents(
 				local cosmetic = args[3]
 
 				if eventConfig and eventConfig.UseHit then
-					caster.Output:Fire(
-						"Hit",
-						cast,
-						result,
-						velocity,
-						cosmetic
-					)
+
+					local Hit = FastCastEvents.Hit
+					if Hit then
+						Hit(
+							cast,
+							result,
+							velocity,
+							cosmetic
+						)
+					end
 				end
 
 			elseif eventType == "Pierced" then
@@ -514,13 +522,16 @@ local function FireQueuedEvents(
 				local cosmetic = args[3]
 
 				if eventConfig and eventConfig.UsePierced then
-					caster.Output:Fire(
-						"Pierced",
-						cast,
-						result,
-						velocity,
-						cosmetic
-					)
+
+					local Pierced = FastCastEvents.Pierced
+					if Pierced then
+						Pierced(
+							cast,
+							result,
+							velocity,
+							cosmetic
+						)
+					end
 				end
 
 			elseif eventType == "CastTerminating" then
@@ -535,16 +546,17 @@ local function FireQueuedEvents(
 				if eventConfig
 					and eventConfig.UseCastTerminating
 				then
-					caster.Output:Fire(
-						"CastTerminating",
-						cast
-					)
+					local CastTerminating = FastCastEvents.CastTerminating
+					if CastTerminating then
+						CastTerminating(cast)
+					end
 				end
 
 				if callback then
 					callback(cast)
 				end
 
+				-- TODO: Fix
 				caster.ActiveCastCleaner:Fire(cast.ID)
 			end
 		end
@@ -1460,6 +1472,14 @@ function SerialSimulation.Stop()
 		SerialSimulation.Connection:Disconnect()
 		SerialSimulation.Connection = nil
 	end
+end
+
+function SerialSimulation:_UpdateEvent(name: string, newEventfn: (any) -> ())
+	if type(newEventfn) ~= "function" then
+		return
+	end
+
+	FastCastEvents[name] = newEventfn
 end
 
 return SerialSimulation
