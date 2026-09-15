@@ -25,7 +25,7 @@ All pull requests will go through **code review** before merging.
 ### Code Review Expectations
 
 - Code should be **clean, readable, and follow existing style** (Luau typing, naming conventions, etc.)
-- New features should have **basic tests** (when applicable) or clear usage examples
+- Code should pass **Basic testing**
 - Documentation should be updated if the public API changes
 - Keep PRs **focused** - one feature/fix per pull request is ideal
 - Be prepared to make changes based on feedback
