@@ -981,10 +981,11 @@ local function SimulateCast(
 
 	if not result then
 		if casts_DistanceCovered[id] >= casts_MaxDistance[id] then
+			local _, castTerminatingfn = GetEventCallbacks(id)
 			QueueEvent(
 				id,
 				"CastTerminating",
-				GetEventCallbacks(id)
+				castTerminatingfn
 			)
 		end
 

@@ -108,8 +108,6 @@ local casts_ActiveMotor6Ds = {} :: { [number]: Motor6D }
 local casts_ID = {} :: { number }
 local casts_ID_Index = {} :: { [number]: number }
 
-local casts_FastCastEvents = {} :: { [number]: TypeDef.FastCastEvents }
-
 local queuedEvents: { [number]: { QueuedEventData } } = {}
 local queuedVisualizes: {
 	[number]: { QueuedVisualizeCastData | QueuedVisualizeHitData }
@@ -531,30 +529,8 @@ local function FireQueuedEvents(
 				end
 
 			elseif eventType == "CastTerminating" then
-				local callback = args[1]
-
-				if cast._Destroying then
-					continue
-				end
-
-				if eventConfig
-					and eventConfig.UseCastTerminating
-				then
-					local _CastTerminate = BaseCastRef._TerminateCast
-					local CastTerminating = FastCastEvents.CastTerminating
-
-					if CastTerminating then
-						CastTerminating(cast)
-					end
-
-					if _CastTerminate then
-						_CastTerminate(castID)
-					end
-				end
-
-				if callback then
-					callback(cast)
-				end
+				BaseCastRef._TerminateCast(castID)
+				SerialSimulation_Unregister(castID)
 			end
 		end
 	end
@@ -1193,17 +1169,6 @@ function SerialSimulation_Register(cast: any)
 	table.insert(casts_ID, id)
 	casts_ID_Index[id] = #casts_ID
 
-	-- Load optional event module.
-	local eventModule = cast.RayInfo.FastCastEventsModule
-
-	if typeof(eventModule) == "Instance"
-		and eventModule:IsA("ModuleScript")
-	then
-		casts_FastCastEvents[id] = require(eventModule)
-	else
-		casts_FastCastEvents[id] = nil
-	end
-
 	local trajectory = casts_Trajectory[id]
 
 	local position = GetPositionAtTime(
@@ -1215,6 +1180,20 @@ function SerialSimulation_Register(cast: any)
 
 	casts_CFrame[id] = CFrame.new(position)
 	cast.CFrame = casts_CFrame[id]
+
+	if CurrentMovementMode == "Motor6D"
+		and MovementEnabled
+	then
+		local cosmetic = casts_RayInfo[id].CosmeticBulletObject
+
+		if cosmetic
+			and BaseCastRef
+			and BaseCastRef._GetMotor6D
+		then
+			casts_ActiveMotor6Ds[id] =
+				BaseCastRef._GetMotor6D(cosmetic)
+		end
+	end
 
 	queuedEvents[id] = {}
 end
@@ -1233,7 +1212,6 @@ function SerialSimulation_Unregister(castID: number)
 	casts_Trajectory[castID] = nil
 
 	casts_FastCastEventsConfig[castID] = nil
-	casts_FastCastEvents[castID] = nil
 
 	casts_VisualizeCasts[castID] = nil
 	casts_VisualizeCastSettings[castID] = nil
@@ -1358,6 +1336,20 @@ local function UpdateCasts(delta: number)
 				id,
 				delta
 			)
+		end
+	end
+
+	-- =========================================================================
+	-- Write-back SoA -> ActiveCast so ActivesRef[id] has current values
+	-- =========================================================================
+
+	for _, id in casts_ID do
+		local cast = ActivesRef[id]
+
+		if cast then
+			cast.StateInfo.TotalRuntime = casts_TotalRunTime[id]
+			cast.StateInfo.DistanceCovered = casts_DistanceCovered[id]
+			cast.CFrame = casts_CFrame[id]
 		end
 	end
 
