@@ -2,7 +2,7 @@
 - [ ] Create a Debugger GUI for benchmarking and testing (debuggergui)
 - [ ] Add a manual test checklist MD
 - [ ] Code improvements
-- [ ] Add dynamic RunService event configuration for Caster (feats)
+~~- [ ] Add dynamic RunService event configuration for Caster (feats)~~ (Cancelled)
 - [ ] Add `BindToSimulation` and `UseFixedSimulation` (feats)
 - [ ] Migration guide from FastCast Redux/FastCast (DOCS)
 - [ ] Performance guide and best practices (DOCS)
