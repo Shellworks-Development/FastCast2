@@ -71,7 +71,7 @@ function BaseCast.Init(events: any, Data: any)
 
 	SerialSimulation.Init(self, events)
 
-	self.SerialSimulation:SetMovementModeEnabled(true, self.CurrentMovementMode)
+	SerialSimulation.SetMovementModeEnabled(true, self.CurrentMovementMode)
 
 	SerialSimulation.Start()
 
@@ -103,7 +103,7 @@ function BaseCast:Raycast(
 		CastType = EnumCastTypes.Raycast
 	} :: any, self.ObjectCacheInstance)
 
-	self.SerialSimulation:Register(cast)
+	SerialSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
 
 	if Behavior.FastCastEventsConfig.UseCastFire and self.CastFirefn then
@@ -139,7 +139,7 @@ function BaseCast:Blockcast(
 		Size = Size
 	} :: any, self.ObjectCacheInstance)
 
-	self.SerialSimulation:Register(cast)
+	SerialSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
 
 	if Behavior.FastCastEventsConfig.UseCastFire and self.CastFirefn then
@@ -175,7 +175,7 @@ function BaseCast:Spherecast(
 		Radius = Radius
 	} :: any, self.ObjectCacheInstance)
 
-	self.SerialSimulation:Register(cast)
+	SerialSimulation.Register(cast)
 	self.Actives[cast.ID] = cast
 
 	if Behavior.FastCastEventsConfig.UseCastFire and self.CastFirefn then
@@ -208,7 +208,7 @@ function BaseCast:SetMovementModeEnabled(enabled: boolean, mode: "BulkMoveTo" | 
 		end
 	end
 
-	self.SerialSimulation:SetMovementModeEnabled(enabled, mode)
+	SerialSimulation.SetMovementModeEnabled(enabled, mode)
 end
 
 function BaseCast:BindObjectCache(
@@ -251,10 +251,6 @@ Destroys the BaseCast instance and cleans up resources.
 
 ]=]
 function BaseCast:Destroy()
-	if self.SerialSimulation then
-		self.SerialSimulation:Stop()
-	end
-
 	if self.ObjectCacheInstance then
 		self.ObjectCacheInstance:Destroy()
 	end
@@ -318,7 +314,7 @@ function BaseCast:_UpdateEvents(eventName: string, newEventfn: (...any) -> ())
 		self.CastFirefn = newEventfn
 		return
 	end
-	self.SerialSimulation:_UpdateEvents(eventName, newEventfn)
+	SerialSimulation._UpdateEvent(eventName, newEventfn)
 end
 
 return BaseCast

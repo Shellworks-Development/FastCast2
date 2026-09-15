@@ -85,9 +85,6 @@ local casts_CancelHighResCast = {} :: { [number]: boolean }
 
 local casts_Trajectory = {} :: { [number]: TypeDef.CastTrajectory }
 
-local casts_FastCastEventsModuleConfig =
-	{} :: { [number]: TypeDef.FastCastEventsModuleConfig }
-
 local casts_FastCastEventsConfig =
 	{} :: { [number]: TypeDef.FastCastEventsConfig }
 
@@ -124,7 +121,7 @@ local BaseCastRef: any = nil
 local CurrentMovementMode: "BulkMoveTo" | "Motor6D" = "BulkMoveTo"
 local MovementEnabled = false
 
-local FastCastEvents: {[string]: (any) -> ()} = {}
+local FastCastEvents = {} :: {[number]: (any) -> ()}
 
 -- ============================================================================
 -- Math
@@ -611,31 +608,6 @@ local function UpdateMotor6Ds()
 end
 
 -- ============================================================================
--- Event callback helpers
--- ============================================================================
-
-local function GetEventCallbacks(id: number)
-	local moduleConfig = casts_FastCastEventsModuleConfig[id]
-	local events = casts_FastCastEvents[id]
-
-	if not moduleConfig or not events then
-		return nil, nil
-	end
-
-	local canPierce =
-		moduleConfig.UseCanPierce
-		and events.CanPierce
-		or nil
-
-	local terminating =
-		moduleConfig.UseCastTerminating
-		and events.CastTerminating
-		or nil
-
-	return canPierce, terminating
-end
-
--- ============================================================================
 -- Simulation helpers
 -- ============================================================================
 
@@ -643,8 +615,7 @@ local function QueueHit(
 	id: number,
 	result: RaycastResult,
 	velocity: Vector3,
-	sub: boolean,
-	castTerminatingfn: TypeDef.OnCastTerminatingFunction?
+	sub: boolean
 )
 	QueueEvent(
 		id,
@@ -662,8 +633,7 @@ local function QueueHit(
 
 	QueueEvent(
 		id,
-		"CastTerminating",
-		castTerminatingfn
+		"CastTerminating"
 	)
 end
 
@@ -720,7 +690,6 @@ local function ResimulateHit(
 	targetWorldRoot: WorldRoot,
 	castHandler: any,
 	canPierce: TypeDef.CanPierceFunction?,
-	castTerminatingfn: TypeDef.OnCastTerminatingFunction?,
 	fallbackResult: RaycastResult,
 	fallbackVelocity: Vector3
 ): boolean
@@ -814,8 +783,7 @@ local function ResimulateHit(
 			id,
 			subResult,
 			subVelocity,
-			true,
-			castTerminatingfn
+			true
 		)
 
 		return true
@@ -829,8 +797,7 @@ local function ResimulateHit(
 		id,
 		fallbackResult,
 		fallbackVelocity,
-		false,
-		castTerminatingfn
+		false
 	)
 
 	return true
@@ -951,8 +918,7 @@ local function SimulateCast(
 		if casts_DistanceCovered[id] >= casts_MaxDistance[id] then
 			QueueEvent(
 				id,
-				"CastTerminating",
-				GetEventCallbacks(id)
+				"CastTerminating"
 			)
 		end
 
@@ -967,7 +933,7 @@ local function SimulateCast(
 		return
 	end
 
-	local canPierce, castTerminatingfn = GetEventCallbacks(id)
+	local canPierce = FastCastEvents.CanPierce
 
 	-- ------------------------------------------------------------------------
 	-- Pierce.
@@ -1000,8 +966,7 @@ local function SimulateCast(
 		if casts_IsActivelyResimulating[id] then
 			QueueEvent(
 				id,
-				"CastTerminating",
-				castTerminatingfn
+				"CastTerminating"
 			)
 
 			warn(
@@ -1026,7 +991,6 @@ local function SimulateCast(
 			worldRoot,
 			handler,
 			canPierce,
-			castTerminatingfn,
 			result,
 			velocity
 		)
@@ -1038,8 +1002,7 @@ local function SimulateCast(
 		id,
 		result,
 		velocity,
-		false,
-		castTerminatingfn
+		false
 	)
 end
 
@@ -1052,12 +1015,9 @@ local function SimulateAlwaysHighFidelity(
 	delta: number
 )
 	if casts_IsActivelyResimulating[id] then
-		local _, terminating = GetEventCallbacks(id)
-
 		QueueEvent(
 			id,
-			"CastTerminating",
-			terminating
+			"CastTerminating"
 		)
 
 		warn(
@@ -1203,8 +1163,6 @@ function SerialSimulation_Register(cast: any)
 
 	casts_Trajectory[id] = cast.StateInfo.Trajectory
 
-	casts_FastCastEventsModuleConfig[id] = cast.StateInfo.FastCastEventsModuleConfig
-
 	casts_FastCastEventsConfig[id] = cast.StateInfo.FastCastEventsConfig
 
 	casts_VisualizeCasts[id] = cast.StateInfo.VisualizeCasts
@@ -1266,7 +1224,6 @@ function SerialSimulation_Unregister(castID: number)
 
 	casts_Trajectory[castID] = nil
 
-	casts_FastCastEventsModuleConfig[castID] = nil
 	casts_FastCastEventsConfig[castID] = nil
 	casts_FastCastEvents[castID] = nil
 
@@ -1426,7 +1383,7 @@ local SerialSimulation = {}
 
 SerialSimulation.Connection = nil :: RBXScriptConnection?
 
-function SerialSimulation.Init(baseCastRef: any)
+function SerialSimulation.Init(baseCastRef: any, events: TypeDef.FastCastEvents)
 	if ActivesRef ~= nil then
 		warn(
 			"[FastCast2] SerialSimulation already initialized. Skipping."
@@ -1437,6 +1394,8 @@ function SerialSimulation.Init(baseCastRef: any)
 
 	BaseCastRef = baseCastRef
 	ActivesRef = baseCastRef.Actives
+
+	FastCastEvents = events
 end
 
 function SerialSimulation.Register(cast: any)
@@ -1456,14 +1415,14 @@ end
 
 function SerialSimulation.Start()
 	if SerialSimulation.Connection then
-		warn("[FastCast2] SerialSimulation already started.")
+		--warn("[FastCast2] SerialSimulation already started.")
 		return
 	end
 
 	if RS:IsClient() then
-		SerialSimulation.Connection = RS.PreSimulation:ConnectParallel(UpdateCasts)
+		SerialSimulation.Connection = RS.PreSimulation:Connect(UpdateCasts)
 	else
-		SerialSimulation.Connection = RS.Heartbeat:ConnectParallel(UpdateCasts)
+		SerialSimulation.Connection = RS.Heartbeat:Connect(UpdateCasts)
 	end
 end
 
@@ -1474,7 +1433,7 @@ function SerialSimulation.Stop()
 	end
 end
 
-function SerialSimulation:_UpdateEvent(name: string, newEventfn: (any) -> ())
+function SerialSimulation._UpdateEvent(name: string, newEventfn: (any) -> ())
 	if type(newEventfn) ~= "function" then
 		return
 	end
