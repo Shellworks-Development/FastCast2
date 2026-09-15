@@ -43,8 +43,7 @@ local function TerminateCast(cast: any, castTerminatingFunction: TypeDef.OnCastT
 	end
 end
 
-
-function BaseCast.Init(events: TypeDef.FastCastEvents, Data: any)
+function BaseCast.Init(events: any, Data: any)
 	local self = setmetatable({}, BaseCast)
 	self.Actives = {}
 	self.CastFirefn = events.CastFire
@@ -70,12 +69,11 @@ function BaseCast.Init(events: TypeDef.FastCastEvents, Data: any)
 		self.Motor6DCacheInstance = Motor6DCache.new()
 	end
 
-	self.SerialSimulation = SerialSimulation.new()
-	self.SerialSimulation:Init(self, events)
+	SerialSimulation.Init(self, events)
 
 	self.SerialSimulation:SetMovementModeEnabled(true, self.CurrentMovementMode)
 
-	self.SerialSimulation:Start()
+	SerialSimulation.Start()
 
 	return self
 end

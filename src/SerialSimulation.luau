@@ -1,16 +1,18 @@
 --[[
-	- Author: Mawin_CK
+	- Author: Mawin CK
 	- Date: 2026
 ]]
 
 --!native
 --!optimize 2
 
-local RunService = game:GetService("RunService")
+local RS = game:GetService("RunService")
 
-local TypeDef = require(script.Parent:WaitForChild("TypeDefinitions"))
-local FastCastEnums = require(script.Parent:WaitForChild("FastCastEnums"))
-local Config = require(script.Parent:WaitForChild("Config"))
+local FastCastModule = script.Parent
+
+local TypeDef = require(FastCastModule:WaitForChild("TypeDefinitions"))
+local FastCastEnums = require(FastCastModule:WaitForChild("FastCastEnums"))
+local Config = require(FastCastModule:WaitForChild("Config"))
 
 local DebugLogging = Config.DebugLogging
 local EnumCastTypes = FastCastEnums.CastType
@@ -18,34 +20,32 @@ local EnumCastTypes = FastCastEnums.CastType
 local DEFAULT_MAX_DISTANCE = 1000
 local FC_VIS_OBJ_NAME = "FastCastVisualizationObjects"
 
----------------------------------------------------------------------
+-- ============================================================================
 -- Types
----------------------------------------------------------------------
+-- ============================================================================
 
 type BlockcastVariant = {
 	CastType: number,
-	Size: Vector3,
+	Size: Vector3
 }
 
 type SpherecastVariant = {
 	CastType: number,
-	Radius: number,
+	Radius: number
 }
 
-type CastVariants =
-	BlockcastVariant
-	| SpherecastVariant
+type CastVariants = BlockcastVariant | SpherecastVariant
 
 type RayVisualizerVariant = {
-	castLength: number,
+	castLength: number
 }
 
 type BlockVisualizerVariant = {
-	size: Vector3,
+	size: Vector3
 }
 
 type SphereVisualizerVariant = {
-	radius: number,
+	radius: number
 }
 
 type CastVisualizerVariants =
@@ -55,34 +55,23 @@ type CastVisualizerVariants =
 
 type QueuedEventData = {
 	eventType: string,
-	args: { any },
+	args: { any }
 }
 
 type QueuedVisualizeCastData = {
 	castStartCFrame: CFrame,
-	sub: boolean,
+	sub: boolean
 }
 
 type QueuedVisualizeHitData = {
 	atCF: CFrame,
 	wasPierce: boolean,
-	sub: boolean,
+	sub: boolean
 }
 
-type SegmentData = {
-	lastPoint: Vector3,
-	currentPoint: Vector3,
-
-	lastTime: number,
-	currentTime: number,
-
-	velocity: Vector3,
-	displacement: Vector3,
-}
-
----------------------------------------------------------------------
--- SoA State
----------------------------------------------------------------------
+-- ============================================================================
+-- State
+-- ============================================================================
 
 local casts_TotalRunTime = {} :: { [number]: number }
 local casts_DistanceCovered = {} :: { [number]: number }
@@ -95,12 +84,16 @@ local casts_IsActivelyResimulating = {} :: { [number]: boolean }
 local casts_CancelHighResCast = {} :: { [number]: boolean }
 
 local casts_Trajectory = {} :: { [number]: TypeDef.CastTrajectory }
-local casts_FastCastEventsConfig = {} :: { [number]: TypeDef.FastCastEventsConfig }
+
+local casts_FastCastEventsModuleConfig =
+	{} :: { [number]: TypeDef.FastCastEventsModuleConfig }
+
+local casts_FastCastEventsConfig =
+	{} :: { [number]: TypeDef.FastCastEventsConfig }
 
 local casts_VisualizeCasts = {} :: { [number]: boolean }
-local casts_VisualizeCastSettings = {} :: {
-	[number]: TypeDef.VisualizeCastSettings
-}
+local casts_VisualizeCastSettings =
+	{} :: { [number]: TypeDef.VisualizeCastSettings }
 
 local casts_RayInfo = {} :: { [number]: TypeDef.CastRayInfo }
 local casts_UserData = {} :: { [number]: any }
@@ -111,37 +104,61 @@ local casts_CastType = {} :: { [number]: number }
 local casts_CastVariant = {} :: { [number]: CastVariants }
 
 local casts_MaxDistance = {} :: { [number]: number }
-local casts_ActiveMotor6Ds = {} :: { [number]: Motor6D }
-
 local casts_RayDisplacement = {} :: { [number]: number }
 
-local queuedEvents: {
-	[number]: { QueuedEventData },
-} = {}
+local casts_ActiveMotor6Ds = {} :: { [number]: Motor6D }
 
+local casts_ID = {} :: { number }
+local casts_ID_Index = {} :: { [number]: number }
+
+local casts_FastCastEvents = {} :: { [number]: TypeDef.FastCastEvents }
+
+local queuedEvents: { [number]: { QueuedEventData } } = {}
 local queuedVisualizes: {
-	[number]: {
-		QueuedVisualizeCastData | QueuedVisualizeHitData
-	},
+	[number]: { QueuedVisualizeCastData | QueuedVisualizeHitData }
 } = {}
 
----------------------------------------------------------------------
--- Cast Handlers
----------------------------------------------------------------------
+local ActivesRef: any = nil
+local BaseCastRef: any = nil
+
+local CurrentMovementMode: "BulkMoveTo" | "Motor6D" = "BulkMoveTo"
+local MovementEnabled = false
+
+-- ============================================================================
+-- Math
+-- ============================================================================
+
+local function GetPositionAtTime(
+	t: number,
+	origin: Vector3,
+	initialVelocity: Vector3,
+	acceleration: Vector3
+): Vector3
+	return origin
+		+ initialVelocity * t
+		+ acceleration * (t ^ 2 / 2)
+end
+
+local function GetVelocityAtTime(
+	t: number,
+	initialVelocity: Vector3,
+	acceleration: Vector3
+): Vector3
+	return initialVelocity + acceleration * t
+end
+
+-- ============================================================================
+-- Cast handlers
+-- ============================================================================
 
 local castHandlers = {
-
 	[EnumCastTypes.Raycast] = function(
 		worldRoot: WorldRoot,
 		origin: Vector3,
 		direction: Vector3,
 		params: RaycastParams
 	)
-		return worldRoot:Raycast(
-			origin,
-			direction,
-			params
-		)
+		return worldRoot:Raycast(origin, direction, params)
 	end,
 
 	[EnumCastTypes.Blockcast] = function(
@@ -172,59 +189,28 @@ local castHandlers = {
 			direction,
 			params
 		)
-	end,
+	end
 }
 
----------------------------------------------------------------------
--- Math
----------------------------------------------------------------------
+-- ============================================================================
+-- Visualization
+-- ============================================================================
 
-local function GetPositionAtTime(
-	t: number,
-	origin: Vector3,
-	initialVelocity: Vector3,
-	acceleration: Vector3
-): Vector3
-
-	return origin
-		+ initialVelocity * t
-		+ acceleration * (t * t * 0.5)
-end
-
-local function GetVelocityAtTime(
-	t: number,
-	initialVelocity: Vector3,
-	acceleration: Vector3
-): Vector3
-
-	return initialVelocity + acceleration * t
-end
-
----------------------------------------------------------------------
--- Debug Visualization
----------------------------------------------------------------------
-
-local function DebrisAdd(
-	object: Instance,
-	lifetime: number
-)
+local function DebrisAdd(obj: Instance, lifetime: number)
 	if lifetime <= 0 then
-		object:Destroy()
+		obj:Destroy()
 		return
 	end
 
 	task.delay(lifetime, function()
-		if object.Parent then
-			object:Destroy()
+		if obj.Parent then
+			obj:Destroy()
 		end
 	end)
 end
 
 local function GetVisualizationContainer(): Instance
-
-	local container = workspace.Terrain:FindFirstChild(
-		FC_VIS_OBJ_NAME
-	)
+	local container = workspace.Terrain:FindFirstChild(FC_VIS_OBJ_NAME)
 
 	if container then
 		return container
@@ -238,88 +224,63 @@ local function GetVisualizationContainer(): Instance
 	return container
 end
 
-local function VisualizeRaySegment(
+local function DbgVisualizeRaySegment(
 	startCFrame: CFrame,
 	settings: TypeDef.VisualizeCastSettings,
 	variant: RayVisualizerVariant
 )
-
 	local adornment = Instance.new("ConeHandleAdornment")
 
 	adornment.Adornee = workspace.Terrain
 	adornment.CFrame = startCFrame
 	adornment.Height = variant.castLength
-
 	adornment.Color3 = settings.Debug_SegmentColor
 	adornment.Radius = settings.Debug_SegmentSize
 	adornment.Transparency = settings.Debug_SegmentTransparency
-
 	adornment.Parent = GetVisualizationContainer()
 
-	DebrisAdd(
-		adornment,
-		settings.Debug_RayLifetime
-	)
-
-	return adornment
+	DebrisAdd(adornment, settings.Debug_RayLifetime)
 end
 
-local function VisualizeBlockSegment(
+local function DbgVisualizeBlockSegment(
 	startCFrame: CFrame,
 	settings: TypeDef.VisualizeCastSettings,
 	variant: BlockVisualizerVariant
 )
-
 	local adornment = Instance.new("BoxHandleAdornment")
 
 	adornment.Adornee = workspace.Terrain
 	adornment.CFrame = startCFrame
 	adornment.Size = variant.size
-
 	adornment.Color3 = settings.Debug_SegmentColor
 	adornment.Transparency = settings.Debug_SegmentTransparency
-
 	adornment.Parent = GetVisualizationContainer()
 
-	DebrisAdd(
-		adornment,
-		settings.Debug_RayLifetime
-	)
-
-	return adornment
+	DebrisAdd(adornment, settings.Debug_RayLifetime)
 end
 
-local function VisualizeSphereSegment(
+local function DbgVisualizeSphereSegment(
 	startCFrame: CFrame,
 	settings: TypeDef.VisualizeCastSettings,
 	variant: SphereVisualizerVariant
 )
-
 	local adornment = Instance.new("SphereHandleAdornment")
 
 	adornment.Adornee = workspace.Terrain
 	adornment.CFrame = startCFrame
 	adornment.Radius = variant.radius
-
 	adornment.Color3 = settings.Debug_SegmentColor
 	adornment.Transparency = settings.Debug_SegmentTransparency
-
 	adornment.Parent = GetVisualizationContainer()
 
-	DebrisAdd(
-		adornment,
-		settings.Debug_RayLifetime
-	)
-
-	return adornment
+	DebrisAdd(adornment, settings.Debug_RayLifetime)
 end
 
-local function VisualizeHit(
+local function DbgVisualizeHit(
 	atCFrame: CFrame,
 	wasPierce: boolean,
 	settings: TypeDef.VisualizeCastSettings
 )
-
 	local adornment = Instance.new("SphereHandleAdornment")
 
 	adornment.Adornee = workspace.Terrain
@@ -337,184 +298,54 @@ local function VisualizeHit(
 
 	adornment.Parent = GetVisualizationContainer()
 
-	DebrisAdd(
-		adornment,
-		settings.Debug_HitLifetime
-	)
-
-	return adornment
+	DebrisAdd(adornment, settings.Debug_HitLifetime)
 end
 
 local Visualizers = {
-	[EnumCastTypes.Raycast] = VisualizeRaySegment,
-	[EnumCastTypes.Blockcast] = VisualizeBlockSegment,
-	[EnumCastTypes.Spherecast] = VisualizeSphereSegment,
+	[EnumCastTypes.Raycast] = DbgVisualizeRaySegment,
+	[EnumCastTypes.Blockcast] = DbgVisualizeBlockSegment,
+	[EnumCastTypes.Spherecast] = DbgVisualizeSphereSegment
 }
-
----------------------------------------------------------------------
--- SerialSimulation
----------------------------------------------------------------------
-
-local SerialSimulation = {}
-SerialSimulation.__index = SerialSimulation
-SerialSimulation.__type = "SerialSimulation"
-
----------------------------------------------------------------------
--- Queue Helpers
----------------------------------------------------------------------
-
-function SerialSimulation:QueueEvent(
-	castID: number,
-	eventType: string,
-	...: any
-)
-
-	if not queuedEvents[castID] then
-		queuedEvents[castID] = {}
-	end
-
-	table.insert(
-		queuedEvents[castID],
-		{
-			eventType = eventType,
-			args = { ... },
-		}
-	)
-end
-
-function SerialSimulation:FireQueuedEvents(
-	unFiredEvents
-)
-
-	local sortedIDs = {}
-
-	for id in unFiredEvents do
-		table.insert(
-			sortedIDs,
-			id
-		)
-	end
-
-	table.sort(sortedIDs)
-
-	for _, castID in sortedIDs do
-
-		local events =
-			unFiredEvents[castID]
-
-		if not events then
-			continue
-		end
-
-		for _, event in events do
-
-			local cast =
-				self.ActivesRef[castID]
-
-			if not cast then
-				continue
-			end
-
-			local config = casts_FastCastEventsConfig[castID]
-
-			local eventType = event.eventType
-
-			if eventType == "LengthChanged" then
-
-				if config
-					and config.UseLengthChanged
-					and self.Events.LengthChanged
-				then
-
-					self.Events.LengthChanged(
-						cast,
-						table.unpack(event.args)
-					)
-				end
-
-			elseif eventType == "Hit" then
-
-				if config
-					and config.UseHit
-					and self.Events.Hit
-				then
-
-					self.Events.Hit(
-						cast,
-						table.unpack(event.args)
-					)
-				end
-
-			elseif eventType == "Pierced" then
-
-				if config
-					and config.UsePierced
-					and self.Events.Pierced
-				then
-
-					self.Events.Pierced(
-						cast,
-						table.unpack(event.args)
-					)
-				end
-
-			elseif eventType == "CastTerminating" then
-
-				self.BaseCastRef:_TerminateCast(
-					castID,
-					self.Events.CastTerminating
-				)
-
-				self:Unregister(
-					castID
-				)
-			end
-		end
-	end
-end
 
 -- ============================================================================
 -- Queued visualization
 -- ============================================================================
 
-function SerialSimulation:QueueVisualize(
+local function QueueVisualize(
 	castID: number,
 	data: QueuedVisualizeCastData | QueuedVisualizeHitData
 )
-
 	if not casts_VisualizeCasts[castID] then
 		return
 	end
 
-	if not queuedVisualizes[castID] then
-		queuedVisualizes[castID] = {}
+	local queue = queuedVisualizes[castID]
+
+	if not queue then
+		queue = {}
+		queuedVisualizes[castID] = queue
 	end
 
-	table.insert(
-		queuedVisualizes[castID],
-		data
-	)
+	table.insert(queue, data)
 end
 
-function SerialSimulation:FireQueuedVisualizes(
-	unFiredVisualizes
+local function FireQueuedVisualizes(
+	visualizes: {
+		[number]: {
+			QueuedVisualizeCastData | QueuedVisualizeHitData
+		}
+	}
 )
-
 	local sortedIDs = {}
 
-	for id in unFiredVisualizes do
-		table.insert(
-			sortedIDs,
-			id
-		)
+	for id in visualizes do
+		table.insert(sortedIDs, id)
 	end
 
 	table.sort(sortedIDs)
 
 	for _, castID in sortedIDs do
-
-		local list =
-			unFiredVisualizes[castID]
+		local list = visualizes[castID]
 
 		if not list then
 			continue
@@ -523,28 +354,27 @@ function SerialSimulation:FireQueuedVisualizes(
 		local settings = casts_VisualizeCastSettings[castID]
 
 		if not settings then
-			return
+			continue
 		end
 
 		for _, data in list do
-
+			-- Hit visualization
 			if data.atCF then
-
-				if DebugLogging.Hit
-					and not data.wasPierce
-					and not data.sub
+				if DebugLogging.Hit 
+					and not data.wasPierce 
+					and not data.sub 
 				then
 					print("Hit was successful. Terminating.")
 				end
 
-				if DebugLogging.Pierced
-					and data.wasPierce
-					and not data.sub
+				if DebugLogging.Pierced 
+					and data.wasPierce 
+					and not data.sub 
 				then
-					print("Piercing function returned TRUE.")
+					print("Piercing function returned TRUE to pierce this part.")
 				end
 
-				VisualizeHit(
+				DbgVisualizeHit(
 					data.atCF,
 					data.wasPierce,
 					settings
@@ -553,12 +383,12 @@ function SerialSimulation:FireQueuedVisualizes(
 				continue
 			end
 
+			-- Segment visualization
 			if DebugLogging.Segment and data.sub then
 				print("Subcast visualization")
 			end
 
 			local castType = casts_CastType[castID]
-
 			local visualizer = Visualizers[castType]
 
 			if not visualizer then
@@ -590,46 +420,265 @@ function SerialSimulation:FireQueuedVisualizes(
 	end
 end
 
----------------------------------------------------------------------
--- Event Helpers
----------------------------------------------------------------------
+-- ============================================================================
+-- Queued events
+-- ============================================================================
 
-function SerialSimulation:QueueLengthChanged(
-	id: number,
-	segment: SegmentData,
-	distance: number
+local function QueueEvent(
+	castID: number,
+	eventType: string,
+	...: any
 )
+	local queue = queuedEvents[castID]
 
-	local rayDirection
-
-	if segment.displacement.Magnitude > 0 then
-		rayDirection = segment.displacement.Unit
-	else
-		rayDirection = Vector3.zero
+	if not queue then
+		queue = {}
+		queuedEvents[castID] = queue
 	end
 
-	local cosmeticBullet =
-		casts_RayInfo[id].CosmeticBulletObject
-
-	self:QueueEvent(
-		id,
-		"LengthChanged",
-		segment.lastPoint,
-		rayDirection,
-		distance,
-		segment.velocity,
-		cosmeticBullet
-	)
+	table.insert(queue, {
+		eventType = eventType,
+		args = { ... }
+	})
 end
 
-function SerialSimulation:QueueHit(
+local function FireQueuedEvents(
+	events: { [number]: { QueuedEventData } }
+)
+	local sortedIDs = {}
+
+	for id in events do
+		table.insert(sortedIDs, id)
+	end
+
+	table.sort(sortedIDs)
+
+	for _, castID in sortedIDs do
+		local eventList = events[castID]
+
+		if not eventList then
+			continue
+		end
+
+		for _, event in eventList do
+			local cast = ActivesRef[castID]
+
+			if not cast then
+				continue
+			end
+
+			local caster = cast.Caster
+			local args = event.args
+
+			local moduleConfig = casts_FastCastEventsModuleConfig[castID]
+
+			local eventConfig = casts_FastCastEventsConfig[castID]
+
+			local fastCastEvents = casts_FastCastEvents[castID]
+			local eventType = event.eventType
+
+			if eventType == "LengthChanged" then
+				local lastPoint = args[1]
+				local rayDirection = args[2]
+				local displacement = args[3]
+				local velocity = args[4]
+				local cosmetic = args[5]
+
+				if eventConfig and eventConfig.UseLengthChanged then
+					caster.Output:Fire(
+						"LengthChanged",
+						cast,
+						lastPoint,
+						rayDirection,
+						displacement,
+						velocity,
+						cosmetic
+					)
+				end
+
+				if moduleConfig
+					and moduleConfig.UseLengthChanged
+					and fastCastEvents
+					and fastCastEvents.LengthChanged
+				then
+					fastCastEvents.LengthChanged(
+						cast,
+						lastPoint,
+						rayDirection,
+						displacement,
+						velocity,
+						cosmetic
+					)
+				end
+
+			elseif eventType == "Hit" then
+				local result = args[1]
+				local velocity = args[2]
+				local cosmetic = args[3]
+
+				if eventConfig and eventConfig.UseHit then
+					caster.Output:Fire(
+						"Hit",
+						cast,
+						result,
+						velocity,
+						cosmetic
+					)
+				end
+
+				if moduleConfig
+					and moduleConfig.UseHit
+					and fastCastEvents
+					and fastCastEvents.Hit
+				then
+					fastCastEvents.Hit(
+						cast,
+						result,
+						velocity,
+						cosmetic
+					)
+				end
+
+			elseif eventType == "Pierced" then
+				local result = args[1]
+				local velocity = args[2]
+				local cosmetic = args[3]
+
+				if eventConfig and eventConfig.UsePierced then
+					caster.Output:Fire(
+						"Pierced",
+						cast,
+						result,
+						velocity,
+						cosmetic
+					)
+				end
+
+				if moduleConfig
+					and moduleConfig.UsePierced
+					and fastCastEvents
+					and fastCastEvents.Pierced
+				then
+					fastCastEvents.Pierced(
+						cast,
+						result,
+						velocity,
+						cosmetic
+					)
+				end
+
+			elseif eventType == "CastTerminating" then
+				local callback = args[1]
+
+				if cast._Destroying then
+					continue
+				end
+
+				cast._Destroying = true
+
+				if eventConfig
+					and eventConfig.UseCastTerminating
+				then
+					caster.Output:Fire(
+						"CastTerminating",
+						cast
+					)
+				end
+
+				if callback then
+					callback(cast)
+				end
+
+				caster.ActiveCastCleaner:Fire(cast.ID)
+			end
+		end
+	end
+end
+
+-- ============================================================================
+-- Movement
+-- ============================================================================
+
+local function BulkMoveTo()
+	if CurrentMovementMode ~= "BulkMoveTo"
+		or not MovementEnabled
+	then
+		return
+	end
+
+	local parts = table.create(#casts_ID)
+	local cframes = table.create(#casts_ID)
+
+	for _, id in casts_ID do
+		local rayInfo = casts_RayInfo[id]
+		local cosmetic = rayInfo and rayInfo.CosmeticBulletObject
+
+		if cosmetic and cosmetic.Parent then
+			table.insert(parts, cosmetic)
+			table.insert(cframes, casts_CFrame[id])
+		end
+	end
+
+	if #parts > 0 then
+		workspace:BulkMoveTo(
+			parts,
+			cframes,
+			Enum.BulkMoveMode.FireCFrameChanged
+		)
+	end
+end
+
+local function UpdateMotor6Ds()
+	if CurrentMovementMode ~= "Motor6D"
+		or not MovementEnabled
+	then
+		return
+	end
+
+	for id, motor6d in casts_ActiveMotor6Ds do
+		if motor6d and motor6d.Parent then
+			motor6d.Transform = casts_CFrame[id]
+		end
+	end
+end
+
+-- ============================================================================
+-- Event callback helpers
+-- ============================================================================
+
+local function GetEventCallbacks(id: number)
+	local moduleConfig = casts_FastCastEventsModuleConfig[id]
+	local events = casts_FastCastEvents[id]
+
+	if not moduleConfig or not events then
+		return nil, nil
+	end
+
+	local canPierce =
+		moduleConfig.UseCanPierce
+		and events.CanPierce
+		or nil
+
+	local terminating =
+		moduleConfig.UseCastTerminating
+		and events.CastTerminating
+		or nil
+
+	return canPierce, terminating
+end
+
+-- ============================================================================
+-- Simulation helpers
+-- ============================================================================
+
+local function QueueHit(
 	id: number,
 	result: RaycastResult,
 	velocity: Vector3,
-	sub: boolean
+	sub: boolean,
+	castTerminatingfn: TypeDef.OnCastTerminatingFunction?
 )
-
-	self:QueueEvent(
+	QueueEvent(
 		id,
 		"Hit",
 		result,
@@ -637,24 +686,26 @@ function SerialSimulation:QueueHit(
 		casts_RayInfo[id].CosmeticBulletObject
 	)
 
-	self:QueueVisualize(
+	QueueVisualize(id, {
+		atCF = CFrame.new(result.Position),
+		wasPierce = false,
+		sub = sub
+	})
+
+	QueueEvent(
 		id,
-		{
-			atCF = CFrame.new(result.Position),
-			wasPierce = false,
-			sub = sub,
-		}
+		"CastTerminating",
+		castTerminatingfn
 	)
 end
 
-function SerialSimulation:QueuePierce(
+local function QueuePierce(
 	id: number,
 	result: RaycastResult,
 	velocity: Vector3,
 	sub: boolean
 )
-
-	self:QueueEvent(
+	QueueEvent(
 		id,
 		"Pierced",
 		result,
@@ -662,50 +713,532 @@ function SerialSimulation:QueuePierce(
 		casts_RayInfo[id].CosmeticBulletObject
 	)
 
-	self:QueueVisualize(
-		id,
-		{
-			atCF = CFrame.new(result.Position),
-			wasPierce = true,
-			sub = sub,
-		}
+	QueueVisualize(id, {
+		atCF = CFrame.new(result.Position),
+		wasPierce = true,
+		sub = sub
+	})
+end
+
+local function ShouldPierce(
+	id: number,
+	result: RaycastResult,
+	velocity: Vector3,
+	canPierce: TypeDef.CanPierceFunction?
+): boolean
+	if not canPierce then
+		return false
+	end
+
+	return canPierce(
+		ActivesRef[id],
+		result,
+		velocity,
+		casts_RayInfo[id].CosmeticBulletObject
 	)
 end
 
-function SerialSimulation:QueueTermination(id: number)
-	self:QueueEvent(
-		id,
-		"CastTerminating"
+-- ============================================================================
+-- Automatic high-fidelity resimulation
+-- ============================================================================
+
+local function ResimulateHit(
+	id: number,
+	delta: number,
+	lastDelta: number,
+	origin: Vector3,
+	initialVelocity: Vector3,
+	acceleration: Vector3,
+	targetWorldRoot: WorldRoot,
+	castHandler: any,
+	canPierce: TypeDef.CanPierceFunction?,
+	castTerminatingfn: TypeDef.OnCastTerminatingFunction?,
+	fallbackResult: RaycastResult,
+	fallbackVelocity: Vector3
+): boolean
+
+	casts_IsActivelyResimulating[id] = true
+
+	local rayDisplacement = casts_RayDisplacement[id]
+
+	local segmentCount = math.max(
+		1,
+		math.floor(
+			rayDisplacement
+				/ casts_HighFidelitySegmentSize[id]
+		)
 	)
+
+	local timeIncrement = delta / segmentCount
+
+	if DebugLogging.Calculation then
+		print(
+			"Performing subcast! Time increment: "
+				.. timeIncrement
+				.. ", num segments: "
+				.. segmentCount
+		)
+	end
+
+	for segmentIndex = 1, segmentCount do
+		if casts_CancelHighResCast[id] then
+			casts_CancelHighResCast[id] = false
+			break
+		end
+
+		local subTime =
+			lastDelta + timeIncrement * segmentIndex
+
+		local subPosition = GetPositionAtTime(
+			subTime,
+			origin,
+			initialVelocity,
+			acceleration
+		)
+
+		local subVelocity = GetVelocityAtTime(
+			subTime,
+			initialVelocity,
+			acceleration
+		)
+
+		local subDirection = subVelocity * timeIncrement
+
+		local subResult = castHandler(
+			targetWorldRoot,
+			subPosition,
+			subDirection,
+			casts_RayInfo[id].Parameters,
+			casts_CastVariant[id]
+		)
+
+		QueueVisualize(id, {
+			castStartCFrame = CFrame.new(
+				subPosition,
+				subPosition + subVelocity
+			),
+			sub = true
+		})
+
+		if not subResult then
+			continue
+		end
+
+		if ShouldPierce(
+			id,
+			subResult,
+			subVelocity,
+			canPierce
+			) then
+			QueuePierce(
+				id,
+				subResult,
+				subVelocity,
+				true
+			)
+
+			continue
+		end
+
+		casts_IsActivelyResimulating[id] = false
+
+		QueueHit(
+			id,
+			subResult,
+			subVelocity,
+			true,
+			castTerminatingfn
+		)
+
+		return true
+	end
+
+	casts_IsActivelyResimulating[id] = false
+
+	-- The original cast hit, but none of the
+	-- high-resolution subcasts did.
+	QueueHit(
+		id,
+		fallbackResult,
+		fallbackVelocity,
+		false,
+		castTerminatingfn
+	)
+
+	return true
 end
 
----------------------------------------------------------------------
--- Registration
----------------------------------------------------------------------
+-- ============================================================================
+-- Single simulation step
+-- ============================================================================
 
-function SerialSimulation:Register(
-	cast: any
+local function SimulateCast(
+	id: number,
+	delta: number,
+	fastCastEvents: TypeDef.FastCastEvents?
 )
+	if DebugLogging.Casting then
+		print("Casting for frame - SimulateCast")
+	end
 
+	local trajectory = casts_Trajectory[id]
+	local rayInfo = casts_RayInfo[id]
+	local variant = casts_CastVariant[id]
+
+	local origin = trajectory.Origin
+	local initialVelocity = trajectory.InitialVelocity
+	local acceleration = trajectory.Acceleration
+
+	local previousTime = casts_TotalRunTime[id] - trajectory.StartTime
+
+	local lastPoint = GetPositionAtTime(
+		previousTime,
+		origin,
+		initialVelocity,
+		acceleration
+	)
+
+	casts_TotalRunTime[id] += delta
+
+	local currentTime = casts_TotalRunTime[id] - trajectory.StartTime
+
+	local currentPoint = GetPositionAtTime(
+		currentTime,
+		origin,
+		initialVelocity,
+		acceleration
+	)
+
+	local velocity = GetVelocityAtTime(
+		currentTime,
+		initialVelocity,
+		acceleration
+	)
+
+	local displacement = currentPoint - lastPoint
+
+	local worldRoot = rayInfo.WorldRoot
+	local handler = castHandlers[variant.CastType]
+
+	local result = handler(
+		worldRoot,
+		lastPoint,
+		displacement,
+		rayInfo.Parameters,
+		variant
+	)
+
+	local hitPoint = result
+		and result.Position
+		or currentPoint
+
+	local rayDisplacement = (hitPoint - lastPoint).Magnitude
+
+	casts_RayDisplacement[id] = rayDisplacement
+
+	-- Update cosmetic transform.
+	local direction = displacement
+
+	casts_CFrame[id] =
+		(
+			if direction ~= Vector3.zero
+			then CFrame.new(
+				lastPoint,
+				lastPoint + direction
+			)
+			else CFrame.new(lastPoint)
+		)
+		* CFrame.new(
+			0,
+			0,
+			-rayDisplacement / 2
+		)
+
+	QueueEvent(
+		id,
+		"LengthChanged",
+		lastPoint,
+		direction.Unit,
+		rayDisplacement,
+		velocity,
+		rayInfo.CosmeticBulletObject
+	)
+
+	casts_DistanceCovered[id] += rayDisplacement
+
+	if delta > 0 then
+		QueueVisualize(id, {
+			castStartCFrame = CFrame.new(
+				lastPoint,
+				lastPoint + direction
+			),
+			sub = false
+		})
+	end
+
+	-- ------------------------------------------------------------------------
+	-- No hit.
+	-- ------------------------------------------------------------------------
+
+	if not result then
+		if casts_DistanceCovered[id] >= casts_MaxDistance[id] then
+			QueueEvent(
+				id,
+				"CastTerminating",
+				GetEventCallbacks(id)
+			)
+		end
+
+		return
+	end
+
+	-- ------------------------------------------------------------------------
+	-- Cosmetic bullet collision.
+	-- ------------------------------------------------------------------------
+
+	if result.Instance == rayInfo.CosmeticBulletObject then
+		return
+	end
+
+	local canPierce, castTerminatingfn = GetEventCallbacks(id)
+
+	-- ------------------------------------------------------------------------
+	-- Pierce.
+	-- ------------------------------------------------------------------------
+
+	if ShouldPierce(
+		id,
+		result,
+		velocity,
+		canPierce
+		) then
+		QueuePierce(
+			id,
+			result,
+			velocity,
+			false
+		)
+
+		return
+	end
+
+	-- ------------------------------------------------------------------------
+	-- Hit.
+	-- ------------------------------------------------------------------------
+
+	if casts_HighFidelityBehavior[id]
+		== FastCastEnums.HighFidelityBehavior.Automatic
+		and casts_HighFidelitySegmentSize[id] > 0
+	then
+		if casts_IsActivelyResimulating[id] then
+			QueueEvent(
+				id,
+				"CastTerminating",
+				castTerminatingfn
+			)
+
+			warn(
+				"Cascading cast lag encountered! "
+					.. "The caster attempted to perform a high fidelity "
+					.. "cast before the previous one completed. "
+					.. "Consider increasing HighFidelitySegmentSize."
+			)
+
+			return
+		end
+
+		local lastDelta = previousTime
+
+		ResimulateHit(
+			id,
+			delta,
+			lastDelta,
+			origin,
+			initialVelocity,
+			acceleration,
+			worldRoot,
+			handler,
+			canPierce,
+			castTerminatingfn,
+			result,
+			velocity
+		)
+
+		return
+	end
+
+	QueueHit(
+		id,
+		result,
+		velocity,
+		false,
+		castTerminatingfn
+	)
+end
+
+-- ============================================================================
+-- Always high-fidelity simulation
+-- ============================================================================
+
+local function SimulateAlwaysHighFidelity(
+	id: number,
+	delta: number,
+	fastCastEvents: TypeDef.FastCastEvents?
+)
+	if casts_IsActivelyResimulating[id] then
+		local _, terminating = GetEventCallbacks(id)
+
+		QueueEvent(
+			id,
+			"CastTerminating",
+			terminating
+		)
+
+		warn(
+			"Cascading cast lag encountered! "
+				.. "The caster attempted to perform a high fidelity "
+				.. "cast before the previous one completed. "
+				.. "Consider increasing HighFidelitySegmentSize."
+		)
+
+		return
+	end
+
+	casts_IsActivelyResimulating[id] = true
+
+	local trajectory = casts_Trajectory[id]
+	local rayInfo = casts_RayInfo[id]
+	local variant = casts_CastVariant[id]
+
+	local origin = trajectory.Origin
+	local initialVelocity = trajectory.InitialVelocity
+	local acceleration = trajectory.Acceleration
+
+	local currentTime = casts_TotalRunTime[id] - trajectory.StartTime
+
+	local lastPoint = GetPositionAtTime(
+		currentTime,
+		origin,
+		initialVelocity,
+		acceleration
+	)
+
+	-- Temporarily advance time to determine
+	-- the approximate distance for this frame.
+	casts_TotalRunTime[id] += delta
+
+	local nextTime = casts_TotalRunTime[id] - trajectory.StartTime
+
+	local currentPoint = GetPositionAtTime(
+		nextTime,
+		origin,
+		initialVelocity,
+		acceleration
+	)
+
+	local currentVelocity = GetVelocityAtTime(
+		nextTime,
+		initialVelocity,
+		acceleration
+	)
+
+	local totalDisplacement = currentPoint - lastPoint
+
+	local direction =
+		totalDisplacement.Unit
+		* currentVelocity.Magnitude
+		* delta
+
+	local handler = castHandlers[variant.CastType]
+
+	local resultOfCast = handler(
+		rayInfo.WorldRoot,
+		lastPoint,
+		direction,
+		rayInfo.Parameters,
+		variant
+	)
+
+	local endpoint =
+		resultOfCast
+		and resultOfCast.Position
+		or currentPoint
+
+	local distance = (endpoint - lastPoint).Magnitude
+
+	casts_TotalRunTime[id] -= delta
+
+	local segmentCount = math.max(
+		1,
+		math.floor(
+			distance
+				/ casts_HighFidelitySegmentSize[id]
+		)
+	)
+
+	local timeIncrement = delta / segmentCount
+
+	if DebugLogging.Calculation then
+		print(
+			"Performing subcast! Time increment: "
+				.. timeIncrement
+				.. ", num segments: "
+				.. segmentCount
+		)
+	end
+
+	for segmentIndex = 1, segmentCount do
+		if casts_CancelHighResCast[id] then
+			casts_CancelHighResCast[id] = false
+			break
+		end
+
+		if not ActivesRef[id] then
+			casts_IsActivelyResimulating[id] = false
+			return
+		end
+
+		if DebugLogging.Segment then
+			print(
+				"["
+					.. segmentIndex
+					.. "] Subcast of time increment "
+					.. timeIncrement
+			)
+		end
+
+		SimulateCast(
+			id,
+			timeIncrement,
+			fastCastEvents
+		)
+	end
+
+	casts_IsActivelyResimulating[id] = false
+end
+
+-- ============================================================================
+-- Registration
+-- ============================================================================
+
+function SerialSimulation_Register(cast: any)
 	local id = cast.ID
 
 	casts_TotalRunTime[id] = cast.StateInfo.TotalRuntime or 0
 
 	casts_DistanceCovered[id] = 0
 
-	casts_HighFidelitySegmentSize[id] =
-		cast.StateInfo.HighFidelitySegmentSize
-		or 0.1
+	casts_HighFidelitySegmentSize[id] = cast.StateInfo.HighFidelitySegmentSize or 0.1
 
-	casts_HighFidelityBehavior[id] =
-		cast.StateInfo.HighFidelityBehavior
-		or 0
+	casts_HighFidelityBehavior[id] = cast.StateInfo.HighFidelityBehavior or 0
 
 	casts_IsActivelySimulatingPierce[id] = false
 	casts_IsActivelyResimulating[id] = false
 	casts_CancelHighResCast[id] = false
 
 	casts_Trajectory[id] = cast.StateInfo.Trajectory
+
+	casts_FastCastEventsModuleConfig[id] = cast.StateInfo.FastCastEventsModuleConfig
 
 	casts_FastCastEventsConfig[id] = cast.StateInfo.FastCastEventsConfig
 
@@ -714,49 +1247,48 @@ function SerialSimulation:Register(
 	casts_VisualizeCastSettings[id] = cast.StateInfo.VisualizeCastSettings
 
 	casts_RayInfo[id] = cast.RayInfo
-
 	casts_UserData[id] = cast.UserData
 
-	casts_CastType[id] = cast.CastVariant.CastType
+	casts_CastType[id] =
+		cast.CastVariant.CastType
 
-	casts_CastVariant[id] = cast.CastVariant
+	casts_CastVariant[id] =
+		cast.CastVariant
 
 	casts_MaxDistance[id] =
 		cast.RayInfo.MaxDistance
 		or DEFAULT_MAX_DISTANCE
 
-	table.insert(
-		self.casts_ID,
-		id
-	)
+	table.insert(casts_ID, id)
+	casts_ID_Index[id] = #casts_ID
 
-	self.casts_ID_Index[id] = #self.casts_ID
+	-- Load optional event module.
+	local eventModule = cast.RayInfo.FastCastEventsModule
+
+	if typeof(eventModule) == "Instance"
+		and eventModule:IsA("ModuleScript")
+	then
+		casts_FastCastEvents[id] = require(eventModule)
+	else
+		casts_FastCastEvents[id] = nil
+	end
 
 	local trajectory = casts_Trajectory[id]
 
-	local position =
-		GetPositionAtTime(
-			casts_TotalRunTime[id],
-			trajectory.Origin,
-			trajectory.InitialVelocity,
-			trajectory.Acceleration
-		)
+	local position = GetPositionAtTime(
+		casts_TotalRunTime[id],
+		trajectory.Origin,
+		trajectory.InitialVelocity,
+		trajectory.Acceleration
+	)
 
 	casts_CFrame[id] = CFrame.new(position)
-
 	cast.CFrame = casts_CFrame[id]
 
 	queuedEvents[id] = {}
 end
 
----------------------------------------------------------------------
--- Unregister
----------------------------------------------------------------------
-
-function SerialSimulation:Unregister(
-	castID: number
-)
-
+function SerialSimulation_Unregister(castID: number)
 	casts_TotalRunTime[castID] = nil
 	casts_DistanceCovered[castID] = nil
 
@@ -768,7 +1300,10 @@ function SerialSimulation:Unregister(
 	casts_CancelHighResCast[castID] = nil
 
 	casts_Trajectory[castID] = nil
+
+	casts_FastCastEventsModuleConfig[castID] = nil
 	casts_FastCastEventsConfig[castID] = nil
+	casts_FastCastEvents[castID] = nil
 
 	casts_VisualizeCasts[castID] = nil
 	casts_VisualizeCastSettings[castID] = nil
@@ -784,12 +1319,10 @@ function SerialSimulation:Unregister(
 	casts_RayDisplacement[castID] = nil
 
 	if casts_ActiveMotor6Ds[castID] then
-
-		if self.BaseCastRef
-			and self.BaseCastRef._ReturnMotor6D
+		if BaseCastRef
+			and BaseCastRef._ReturnMotor6D
 		then
-
-			self.BaseCastRef:_ReturnMotor6D(
+			BaseCastRef:_ReturnMotor6D(
 				casts_ActiveMotor6Ds[castID]
 			)
 		end
@@ -797,130 +1330,47 @@ function SerialSimulation:Unregister(
 		casts_ActiveMotor6Ds[castID] = nil
 	end
 
-	local index =
-		self.casts_ID_Index[castID]
+	local index = casts_ID_Index[castID]
 
 	if index then
+		local lastID = casts_ID[#casts_ID]
 
-		local lastID =
-			self.casts_ID[#self.casts_ID]
+		casts_ID[index] = lastID
+		casts_ID_Index[lastID] = index
 
-		self.casts_ID[index] =
-			lastID
-
-		self.casts_ID_Index[lastID] =
-			index
-
-		self.casts_ID[#self.casts_ID] = nil
-		self.casts_ID_Index[castID] = nil
+		table.remove(casts_ID, #casts_ID)
+		casts_ID_Index[castID] = nil
 	end
 
 	queuedEvents[castID] = nil
 	queuedVisualizes[castID] = nil
 end
 
----------------------------------------------------------------------
--- Movement
----------------------------------------------------------------------
+-- ============================================================================
+-- Movement configuration
+-- ============================================================================
 
-function SerialSimulation:BulkMoveTo()
-
-	if self.CurrentMovementMode
-		~= "BulkMoveTo"
-		or not self.MovementEnabled
-	then
-		return
-	end
-
-	local parts =
-		table.create(#self.casts_ID)
-
-	local cframes =
-		table.create(#self.casts_ID)
-
-	for _, id in self.casts_ID do
-
-		local cosmetic =
-			casts_RayInfo[id]
-			and casts_RayInfo[id].CosmeticBulletObject
-
-		if cosmetic
-			and cosmetic.Parent
-		then
-
-			table.insert(
-				parts,
-				cosmetic
-			)
-
-			table.insert(
-				cframes,
-				casts_CFrame[id]
-			)
-		end
-	end
-
-	if #parts > 0 then
-
-		workspace:BulkMoveTo(
-			parts,
-			cframes,
-			Enum.BulkMoveMode.FireCFrameChanged
-		)
-	end
-end
-
-function SerialSimulation:UpdateMotor6Ds()
-
-	if self.CurrentMovementMode
-		~= "Motor6D"
-		or not self.MovementEnabled
-	then
-		return
-	end
-
-	for id, motor6d in casts_ActiveMotor6Ds do
-
-		if motor6d
-			and motor6d.Parent
-		then
-
-			motor6d.Transform =
-				casts_CFrame[id]
-		end
-	end
-end
-
----------------------------------------------------------------------
--- Movement Mode
----------------------------------------------------------------------
-
-function SerialSimulation:SetMovementModeEnabled(
+local function SetMovementModeEnabled(
 	enabled: boolean,
 	mode: "BulkMoveTo" | "Motor6D"
 )
-
-	self.CurrentMovementMode = mode
-
-	self.MovementEnabled = enabled
+	CurrentMovementMode = mode
+	MovementEnabled = enabled
 end
 
----------------------------------------------------------------------
--- Update
----------------------------------------------------------------------
+-- ============================================================================
+-- Main update
+-- ============================================================================
 
-function SerialSimulation:UpdateCasts(
-	delta: number
-)
+local function UpdateCasts(delta: number)
+	for _, id in casts_ID do
+		local cast = ActivesRef[id]
 
-	for _, id in self.casts_ID do
+		if cast and cast._Destroying then
+			continue
+		end
 
-		local cast =
-			self.ActivesRef[id]
-
-		if cast
-			and cast._Destroying
-		then
+		if not casts_Trajectory[id] then
 			continue
 		end
 
@@ -928,172 +1378,101 @@ function SerialSimulation:UpdateCasts(
 			casts_HighFidelitySegmentSize[id] = 0.1
 		end
 
+		local fastCastEvents = casts_FastCastEvents[id]
+
 		local behavior = casts_HighFidelityBehavior[id]
 
 		if behavior == FastCastEnums.HighFidelityBehavior.Always then
-			self:SimulateAlwaysHighFidelity(
+			SimulateAlwaysHighFidelity(
 				id,
-				delta
+				delta,
+				fastCastEvents
 			)
 		else
-			self:SimulateCast(
+			SimulateCast(
 				id,
-				delta
+				delta,
+				fastCastEvents
 			)
 		end
 	end
 
-	-------------------------------------------------------------
-	-- Write state back
-	-------------------------------------------------------------
+	-- =========================================================================
+	-- Main-thread-only work.
+	-- =========================================================================
 
-	for _, id in self.casts_ID do
+	UpdateMotor6Ds()
+	BulkMoveTo()
 
-		local cast =
-			self.ActivesRef[id]
-
-		if cast then
-
-			cast.StateInfo.TotalRuntime =
-				casts_TotalRunTime[id]
-
-			cast.StateInfo.DistanceCovered =
-				casts_DistanceCovered[id]
-
-			cast.CFrame =
-				casts_CFrame[id]
-		end
-	end
-
-	-------------------------------------------------------------
-	-- Movement
-	-------------------------------------------------------------
-
-	self:UpdateMotor6Ds()
-	self:BulkMoveTo()
-
-	-------------------------------------------------------------
-	-- Swap queues
-	-------------------------------------------------------------
-
-	local events =
-		queuedEvents
-
+	local eventsToProcess = queuedEvents
 	queuedEvents = {}
 
-	local visualizes =
-		queuedVisualizes
-
+	local visualizesToProcess = queuedVisualizes
 	queuedVisualizes = {}
 
-	-------------------------------------------------------------
-	-- Dispatch
-	-------------------------------------------------------------
-
-	self:FireQueuedVisualizes(
-		visualizes
+	FireQueuedVisualizes(
+		visualizesToProcess
 	)
 
-	self:FireQueuedEvents(
-		events
+	FireQueuedEvents(
+		eventsToProcess
 	)
 end
 
----------------------------------------------------------------------
--- Construction
----------------------------------------------------------------------
+-- ============================================================================
+-- Public API
+-- ============================================================================
 
-function SerialSimulation.new()
+local SerialSimulation = {}
 
-	local self =
-		setmetatable(
-			{},
-			SerialSimulation
-		)
+SerialSimulation.Connection = nil :: RBXScriptConnection?
 
-	self.Connection = nil
-
-	self.CurrentMovementMode = "BulkMoveTo"
-
-	self.MovementEnabled = true
-
-	self.Events = {}
-
-	self.BaseCastRef = nil
-	self.ActivesRef = nil
-
-	self.casts_ID = {}
-	self.casts_ID_Index = {}
-
-	return self
-end
-
-function SerialSimulation:Init(
-	baseCastRef: any,
-	events: TypeDef.FastCastEvents
-)
-
-	self.BaseCastRef = baseCastRef
-
-	self.ActivesRef = baseCastRef.Actives
-
-	self.Events = events
-end
-
----------------------------------------------------------------------
--- RunService
----------------------------------------------------------------------
-
-function SerialSimulation:Start()
-
-	if self.Connection then
+function SerialSimulation.Init(baseCastRef: any)
+	if ActivesRef ~= nil then
 		warn(
-			"[FastCast2] SerialSimulation already started."
+			"[FastCast2] SerialSimulation already initialized. Skipping."
 		)
 
 		return
 	end
 
-	if RunService:IsClient() then
-
-		self.Connection =
-			RunService.PreSimulation:Connect(
-				function(delta)
-					self:UpdateCasts(delta)
-				end
-			)
-
-	else
-
-		self.Connection =
-			RunService.Heartbeat:Connect(
-				function(delta)
-					self:UpdateCasts(delta)
-				end
-			)
-	end
+	BaseCastRef = baseCastRef
+	ActivesRef = baseCastRef.Actives
 end
 
-function SerialSimulation:Stop()
-
-	if self.Connection then
-
-		self.Connection:Disconnect()
-		self.Connection = nil
-	end
+function SerialSimulation.Register(cast: any)
+	SerialSimulation_Register(cast)
 end
 
----------------------------------------------------------------------
--- Events
----------------------------------------------------------------------
+function SerialSimulation.Unregister(castID: number)
+	SerialSimulation_Unregister(castID)
+end
 
-function SerialSimulation:_UpdateEvents(
-	eventName: string,
-	newEventfn: (...any) -> ()
+function SerialSimulation.SetMovementModeEnabled(
+	enabled: boolean,
+	mode: "BulkMoveTo" | "Motor6D"
 )
+	SetMovementModeEnabled(enabled, mode)
+end
 
-	self.Events[eventName] =
-		newEventfn
+function SerialSimulation.Start()
+	if SerialSimulation.Connection then
+		warn("[FastCast2] SerialSimulation already started.")
+		return
+	end
+
+	if RS:IsClient() then
+		SerialSimulation.Connection = RS.PreSimulation:ConnectParallel(UpdateCasts)
+	else
+		SerialSimulation.Connection = RS.Heartbeat:ConnectParallel(UpdateCasts)
+	end
+end
+
+function SerialSimulation.Stop()
+	if SerialSimulation.Connection then
+		SerialSimulation.Connection:Disconnect()
+		SerialSimulation.Connection = nil
+	end
 end
 
 return SerialSimulation

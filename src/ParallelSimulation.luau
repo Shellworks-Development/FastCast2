@@ -1224,44 +1224,34 @@ end
 function ParallelSimulation_Register(cast: any)
 	local id = cast.ID
 
-	casts_TotalRunTime[id] =
-		cast.StateInfo.TotalRuntime or 0
+	casts_TotalRunTime[id] = cast.StateInfo.TotalRuntime or 0
 
 	casts_DistanceCovered[id] = 0
 
-	casts_HighFidelitySegmentSize[id] =
-		cast.StateInfo.HighFidelitySegmentSize or 0.1
+	casts_HighFidelitySegmentSize[id] = cast.StateInfo.HighFidelitySegmentSize or 0.1
 
-	casts_HighFidelityBehavior[id] =
-		cast.StateInfo.HighFidelityBehavior or 0
+	casts_HighFidelityBehavior[id] = cast.StateInfo.HighFidelityBehavior or 0
 
 	casts_IsActivelySimulatingPierce[id] = false
 	casts_IsActivelyResimulating[id] = false
 	casts_CancelHighResCast[id] = false
 
-	casts_Trajectory[id] =
-		cast.StateInfo.Trajectory
+	casts_Trajectory[id] = cast.StateInfo.Trajectory
 
-	casts_FastCastEventsModuleConfig[id] =
-		cast.StateInfo.FastCastEventsModuleConfig
+	casts_FastCastEventsModuleConfig[id] = cast.StateInfo.FastCastEventsModuleConfig
 
-	casts_FastCastEventsConfig[id] =
-		cast.StateInfo.FastCastEventsConfig
+	casts_FastCastEventsConfig[id] = cast.StateInfo.FastCastEventsConfig
 
-	casts_VisualizeCasts[id] =
-		cast.StateInfo.VisualizeCasts
+	casts_VisualizeCasts[id] = cast.StateInfo.VisualizeCasts
 
-	casts_VisualizeCastSettings[id] =
-		cast.StateInfo.VisualizeCastSettings
+	casts_VisualizeCastSettings[id] = cast.StateInfo.VisualizeCastSettings
 
 	casts_RayInfo[id] = cast.RayInfo
 	casts_UserData[id] = cast.UserData
 
-	casts_CastType[id] =
-		cast.CastVariant.CastType
+	casts_CastType[id] = cast.CastVariant.CastType
 
-	casts_CastVariant[id] =
-		cast.CastVariant
+	casts_CastVariant[id] = cast.CastVariant
 
 	casts_MaxDistance[id] =
 		cast.RayInfo.MaxDistance
