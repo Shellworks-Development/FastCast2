@@ -57,6 +57,9 @@ I'm not strict about changelogs, and I don't really bother writing explicit chan
 - No personal attacks, harassment, or toxic behavior
 - Keep discussions technical and constructive
 
+### Testing
+- Read manual testing instructions: https://github.com/weenachuangkud/FastCast2/blob/main/TESTS.md
+
 ### Questions?
 
 Feel free to ask anything:
