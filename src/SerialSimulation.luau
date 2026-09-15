@@ -1419,6 +1419,9 @@ function SerialSimulation.Start()
 		return
 	end
 
+	--[[
+		You can edit RunService event, if you want
+	]]
 	if RS:IsClient() then
 		SerialSimulation.Connection = RS.PreSimulation:Connect(UpdateCasts)
 	else

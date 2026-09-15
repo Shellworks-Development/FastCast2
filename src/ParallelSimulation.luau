@@ -1523,6 +1523,9 @@ function ParallelSimulation.Start()
 		return
 	end
 
+	--[[
+		You can edit RunService event, if you want
+	]]
 	if RS:IsClient() then
 		ParallelSimulation.Connection = RS.PreSimulation:ConnectParallel(UpdateCasts)
 	else
