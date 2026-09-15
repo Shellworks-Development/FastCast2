@@ -552,9 +552,6 @@ local function FireQueuedEvents(
 				if callback then
 					callback(cast)
 				end
-
-				-- TODO: Fix
-				caster.ActiveCastCleaner:Fire(cast.ID)
 			end
 		end
 	end
