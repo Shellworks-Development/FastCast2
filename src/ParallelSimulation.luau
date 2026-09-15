@@ -1438,11 +1438,9 @@ local function UpdateCasts(delta: number)
 			casts_HighFidelitySegmentSize[id] = 0.1
 		end
 
-		local fastCastEvents =
-			casts_FastCastEvents[id]
+		local fastCastEvents = casts_FastCastEvents[id]
 
-		local behavior =
-			casts_HighFidelityBehavior[id]
+		local behavior = casts_HighFidelityBehavior[id]
 
 		if behavior
 			== FastCastEnums.HighFidelityBehavior.Always
