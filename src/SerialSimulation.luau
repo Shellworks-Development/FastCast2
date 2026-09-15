@@ -470,11 +470,8 @@ local function FireQueuedEvents(
 			local caster = cast.Caster
 			local args = event.args
 
-			local moduleConfig = casts_FastCastEventsModuleConfig[castID]
-
 			local eventConfig = casts_FastCastEventsConfig[castID]
 
-			local fastCastEvents = casts_FastCastEvents[castID]
 			local eventType = event.eventType
 
 			if eventType == "LengthChanged" then
@@ -487,21 +484,6 @@ local function FireQueuedEvents(
 				if eventConfig and eventConfig.UseLengthChanged then
 					caster.Output:Fire(
 						"LengthChanged",
-						cast,
-						lastPoint,
-						rayDirection,
-						displacement,
-						velocity,
-						cosmetic
-					)
-				end
-
-				if moduleConfig
-					and moduleConfig.UseLengthChanged
-					and fastCastEvents
-					and fastCastEvents.LengthChanged
-				then
-					fastCastEvents.LengthChanged(
 						cast,
 						lastPoint,
 						rayDirection,
@@ -526,19 +508,6 @@ local function FireQueuedEvents(
 					)
 				end
 
-				if moduleConfig
-					and moduleConfig.UseHit
-					and fastCastEvents
-					and fastCastEvents.Hit
-				then
-					fastCastEvents.Hit(
-						cast,
-						result,
-						velocity,
-						cosmetic
-					)
-				end
-
 			elseif eventType == "Pierced" then
 				local result = args[1]
 				local velocity = args[2]
@@ -547,19 +516,6 @@ local function FireQueuedEvents(
 				if eventConfig and eventConfig.UsePierced then
 					caster.Output:Fire(
 						"Pierced",
-						cast,
-						result,
-						velocity,
-						cosmetic
-					)
-				end
-
-				if moduleConfig
-					and moduleConfig.UsePierced
-					and fastCastEvents
-					and fastCastEvents.Pierced
-				then
-					fastCastEvents.Pierced(
 						cast,
 						result,
 						velocity,
@@ -874,8 +830,7 @@ end
 
 local function SimulateCast(
 	id: number,
-	delta: number,
-	fastCastEvents: TypeDef.FastCastEvents?
+	delta: number
 )
 	if DebugLogging.Casting then
 		print("Casting for frame - SimulateCast")
@@ -1082,8 +1037,7 @@ end
 
 local function SimulateAlwaysHighFidelity(
 	id: number,
-	delta: number,
-	fastCastEvents: TypeDef.FastCastEvents?
+	delta: number
 )
 	if casts_IsActivelyResimulating[id] then
 		local _, terminating = GetEventCallbacks(id)
@@ -1209,8 +1163,7 @@ local function SimulateAlwaysHighFidelity(
 
 		SimulateCast(
 			id,
-			timeIncrement,
-			fastCastEvents
+			timeIncrement
 		)
 	end
 
@@ -1385,14 +1338,12 @@ local function UpdateCasts(delta: number)
 		if behavior == FastCastEnums.HighFidelityBehavior.Always then
 			SimulateAlwaysHighFidelity(
 				id,
-				delta,
-				fastCastEvents
+				delta
 			)
 		else
 			SimulateCast(
 				id,
-				delta,
-				fastCastEvents
+				delta
 			)
 		end
 	end

@@ -874,8 +874,7 @@ end
 
 local function SimulateCast(
 	id: number,
-	delta: number,
-	fastCastEvents: TypeDef.FastCastEvents?
+	delta: number
 )
 	if DebugLogging.Casting then
 		print("Casting for frame - SimulateCast")
@@ -1082,8 +1081,7 @@ end
 
 local function SimulateAlwaysHighFidelity(
 	id: number,
-	delta: number,
-	fastCastEvents: TypeDef.FastCastEvents?
+	delta: number
 )
 	if casts_IsActivelyResimulating[id] then
 		local _, terminating = GetEventCallbacks(id)
@@ -1209,8 +1207,7 @@ local function SimulateAlwaysHighFidelity(
 
 		SimulateCast(
 			id,
-			timeIncrement,
-			fastCastEvents
+			timeIncrement
 		)
 	end
 
@@ -1428,21 +1425,17 @@ local function UpdateCasts(delta: number)
 			casts_HighFidelitySegmentSize[id] = 0.1
 		end
 
-		local fastCastEvents = casts_FastCastEvents[id]
-
 		local behavior = casts_HighFidelityBehavior[id]
 
 		if behavior == FastCastEnums.HighFidelityBehavior.Always then
 			SimulateAlwaysHighFidelity(
 				id,
-				delta,
-				fastCastEvents
+				delta
 			)
 		else
 			SimulateCast(
 				id,
-				delta,
-				fastCastEvents
+				delta
 			)
 		end
 	end
