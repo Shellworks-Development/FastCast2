@@ -3,7 +3,7 @@
 - [ ] Add a manual test checklist MD
 - [ ] Code improvements
 - [ ] ~~Add dynamic RunService event configuration for Caster (feats)~~ (Cancelled)
-- [ ] Add `BindToSimulation` and `UseFixedSimulation` (feats)
+- [ ] Add `BindToSimulation` and `UseFixedSimulation` (changes)
 - [ ] Migration guide from FastCast Redux/FastCast (DOCS)
 - [ ] Performance guide and best practices (DOCS)
 - [ ] Common pitfalls and FAQ (DOCS)
