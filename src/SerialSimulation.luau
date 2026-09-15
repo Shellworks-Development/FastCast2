@@ -529,6 +529,10 @@ local function FireQueuedEvents(
 				end
 
 			elseif eventType == "CastTerminating" then
+				local callback = args[1]
+				if callback then
+					callback(cast)
+				end
 				BaseCastRef._TerminateCast(castID)
 				SerialSimulation_Unregister(castID)
 			end
