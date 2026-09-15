@@ -900,11 +900,9 @@ function SerialSimulation:SetMovementModeEnabled(
 	mode: "BulkMoveTo" | "Motor6D"
 )
 
-	self.CurrentMovementMode =
-		mode
+	self.CurrentMovementMode = mode
 
-	self.MovementEnabled =
-		enabled
+	self.MovementEnabled = enabled
 end
 
 ---------------------------------------------------------------------
@@ -930,11 +928,19 @@ function SerialSimulation:UpdateCasts(
 			casts_HighFidelitySegmentSize[id] = 0.1
 		end
 
-		self:SimulateCast(
-			id,
-			delta,
-			self.Events.CanPierce
-		)
+		local behavior = casts_HighFidelityBehavior[id]
+
+		if behavior == FastCastEnums.HighFidelityBehavior.Always then
+			self:SimulateAlwaysHighFidelity(
+				id,
+				delta
+			)
+		else
+			self:SimulateCast(
+				id,
+				delta
+			)
+		end
 	end
 
 	-------------------------------------------------------------
