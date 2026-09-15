@@ -1442,9 +1442,7 @@ local function UpdateCasts(delta: number)
 
 		local behavior = casts_HighFidelityBehavior[id]
 
-		if behavior
-			== FastCastEnums.HighFidelityBehavior.Always
-		then
+		if behavior == FastCastEnums.HighFidelityBehavior.Always then
 			SimulateAlwaysHighFidelity(
 				id,
 				delta,
