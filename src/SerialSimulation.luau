@@ -466,7 +466,6 @@ local function FireQueuedEvents(
 				continue
 			end
 
-			local caster = cast.Caster
 			local args = event.args
 
 			local eventConfig = casts_FastCastEventsConfig[castID]
@@ -538,14 +537,18 @@ local function FireQueuedEvents(
 					continue
 				end
 
-				cast._Destroying = true
-
 				if eventConfig
 					and eventConfig.UseCastTerminating
 				then
+					local _CastTerminate = BaseCastRef._TerminateCast
 					local CastTerminating = FastCastEvents.CastTerminating
+
 					if CastTerminating then
 						CastTerminating(cast)
+					end
+
+					if _CastTerminate then
+						_CastTerminate(castID)
 					end
 				end
 
@@ -612,7 +615,8 @@ local function QueueHit(
 	id: number,
 	result: RaycastResult,
 	velocity: Vector3,
-	sub: boolean
+	sub: boolean,
+	castTerminatingfn: TypeDef.OnCastTerminatingFunction?
 )
 	QueueEvent(
 		id,
@@ -630,7 +634,8 @@ local function QueueHit(
 
 	QueueEvent(
 		id,
-		"CastTerminating"
+		"CastTerminating",
+		castTerminatingfn
 	)
 end
 
@@ -687,6 +692,7 @@ local function ResimulateHit(
 	targetWorldRoot: WorldRoot,
 	castHandler: any,
 	canPierce: TypeDef.CanPierceFunction?,
+	castTerminatingfn: TypeDef.OnCastTerminatingFunction?,
 	fallbackResult: RaycastResult,
 	fallbackVelocity: Vector3
 ): boolean
@@ -780,7 +786,8 @@ local function ResimulateHit(
 			id,
 			subResult,
 			subVelocity,
-			true
+			true,
+			castTerminatingfn
 		)
 
 		return true
@@ -794,7 +801,8 @@ local function ResimulateHit(
 		id,
 		fallbackResult,
 		fallbackVelocity,
-		false
+		false,
+		castTerminatingfn
 	)
 
 	return true
@@ -930,7 +938,8 @@ local function SimulateCast(
 		return
 	end
 
-	local canPierce = FastCastEvents.CanPierce
+	local canPiercefn = FastCastEvents.CanPierce
+	local castTerminatingfn = FastCastEvents.CastTerminating
 
 	-- ------------------------------------------------------------------------
 	-- Pierce.
@@ -940,7 +949,7 @@ local function SimulateCast(
 		id,
 		result,
 		velocity,
-		canPierce
+		canPiercefn
 		) then
 		QueuePierce(
 			id,
@@ -963,7 +972,8 @@ local function SimulateCast(
 		if casts_IsActivelyResimulating[id] then
 			QueueEvent(
 				id,
-				"CastTerminating"
+				"CastTerminating",
+				castTerminatingfn
 			)
 
 			warn(
@@ -987,7 +997,8 @@ local function SimulateCast(
 			acceleration,
 			worldRoot,
 			handler,
-			canPierce,
+			canPiercefn,
+			castTerminatingfn,
 			result,
 			velocity
 		)
@@ -1241,7 +1252,7 @@ function SerialSimulation_Unregister(castID: number)
 		if BaseCastRef
 			and BaseCastRef._ReturnMotor6D
 		then
-			BaseCastRef:_ReturnMotor6D(
+			BaseCastRef._ReturnMotor6D(
 				casts_ActiveMotor6Ds[castID]
 			)
 		end
@@ -1285,7 +1296,7 @@ local function SetMovementModeEnabled(
 			if BaseCastRef
 				and BaseCastRef._ReturnMotor6D
 			then
-				BaseCastRef:_ReturnMotor6D(motor6d)
+				BaseCastRef._ReturnMotor6D(motor6d)
 			end
 
 			casts_ActiveMotor6Ds[id] = nil
@@ -1309,7 +1320,7 @@ local function SetMovementModeEnabled(
 				and BaseCastRef._GetMotor6D
 			then
 				casts_ActiveMotor6Ds[id] =
-					BaseCastRef:_GetMotor6D(cosmetic)
+					BaseCastRef._GetMotor6D(cosmetic)
 			end
 		end
 	end
