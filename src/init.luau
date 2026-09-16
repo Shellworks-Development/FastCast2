@@ -60,6 +60,7 @@
 local TypeDef = require(script:WaitForChild("TypeDefinitions"))
 local DefaultConfigs = require(script:WaitForChild("DefaultConfigs"))
 local BaseCastSerial = require(script:WaitForChild("BaseCastSerial"))
+local SerialSimulation = require(script:WaitForChild("SerialSimulation"))
 local DispatcherModule = script:WaitForChild("FastCastVMs")
 local Dispatcher = require(DispatcherModule)
 
@@ -825,33 +826,17 @@ function FastCast:TerminateCast(cast: vaildcast)
 	if cast._Destroying then return end
 	(cast :: any)._Destroying = true
 
-	local caster = cast.Caster
-	if caster == nil then return end
+	if cast.Mode == "Serial" then
+		SerialSimulation.QueueEvent(cast.ID, "CastTerminating")
+	elseif cast.Mode == "Parallel" then
+		local caster = cast.Caster
+		if caster == nil then return end
 
-	local eventsCfg = cast.StateInfo and cast.StateInfo.FastCastEventsConfig
-
-	if caster.Output then
-		-- Parallel mode: fire event + cleaner, but don't nil cast keys
+		local eventsCfg = cast.StateInfo and cast.StateInfo.FastCastEventsConfig
 		if eventsCfg and eventsCfg.UseCastTerminating then
 			caster.Output:Fire("CastTerminating", cast)
 		end
 		caster.ActiveCastCleaner:Fire(cast.ID)
-	elseif caster.SerialSimulation then
-		-- Serial mode: fire callback sync, destroy cosmetic immediately, queue cleanup
-		if eventsCfg and eventsCfg.UseCastTerminating and caster.SerialSimulation.Events.CastTerminating then
-			caster.SerialSimulation.Events.CastTerminating(cast)
-		end
-
-		if cast.RayInfo and cast.RayInfo.CosmeticBulletObject then
-			if caster.ObjectCacheInstance then
-				caster.ObjectCacheInstance:ReturnPart(cast.RayInfo.CosmeticBulletObject)
-			else
-				cast.RayInfo.CosmeticBulletObject:Destroy()
-			end
-			(cast :: any).RayInfo.CosmeticBulletObject = nil
-		end
-
-		caster.SerialSimulation:QueueEvent(cast.ID, "CastTerminating")
 	end
 end
 

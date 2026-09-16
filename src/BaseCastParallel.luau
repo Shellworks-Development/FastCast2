@@ -59,9 +59,7 @@ local function TerminateCast(cast: any, castTerminatingFunction: TypeDef.OnCastT
 
 	cast.Caster.ActiveCastCleaner:Fire(cast.ID)
 
-	for key, _ in (cast :: any) do
-		cast[key] = nil
-	end
+	table.clear(cast :: any)
 end
 
 local BaseCastInitialized = false

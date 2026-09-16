@@ -28,19 +28,6 @@ local DEFAULT_CACHE_HOLDER = workspace
 
 local NextProjectileID = 0
 
-local function TerminateCast(cast: any, castTerminatingFunction: TypeDef.OnCastTerminatingFunction?)
-	if cast._Destroying then return end
-	cast._Destroying = true
-
-	if castTerminatingFunction then
-		castTerminatingFunction((cast :: any))
-	end
-
-	for key, _ in (cast :: any) do
-		cast[key] = nil
-	end
-end
-
 local Actives = {}
 local CastFirefn = nil
 local Motor6DCacheInstance = nil
@@ -261,8 +248,8 @@ function BaseCast.Destroy()
 		Motor6DCacheInstance:Destroy()
 	end
 
-	for _, v in Actives do
-		TerminateCast(v)
+	for castID in Actives do
+		BaseCast._TerminateCast(castID)
 	end
 
 	Actives = {}
@@ -283,9 +270,7 @@ function BaseCast._TerminateCast(castID: number)
 			end
 		end
 
-		for key, _ in (cast :: any) do
-			cast[key] = nil
-		end
+		table.clear(cast :: any)
 		Actives[castID] = nil
 	end
 end
