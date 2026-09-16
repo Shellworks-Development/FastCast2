@@ -17,4 +17,3 @@
 - [ ] Update Roblox Model of FastCast2 (RELEASE)
 - [ ] Update README.md (DOCS)
 - [ ] Add proper typechecking using [“t” - A Runtime Type Checker for Roblox](https://devforum.roblox.com/t/t-a-runtime-type-checker-for-roblox/139769)
-- [ ] FastCast2 fork: ParallelOnly, SerialOnly (Projects)
