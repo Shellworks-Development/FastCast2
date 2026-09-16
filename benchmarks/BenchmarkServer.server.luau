@@ -255,13 +255,15 @@ end
 
 local function terminateActiveCasts()
 	for i = #ActiveCasts, 1, -1 do
-		local cast = ActiveCasts[i]
+		task.spawn(function()
+			local cast = ActiveCasts[i]
 
-		if cast then
-			FastCast:TerminateCast(cast)
-		end
+			if cast then
+				FastCast:TerminateCast(cast)
+			end
 
-		ActiveCasts[i] = nil
+			ActiveCasts[i] = nil
+		end)
 	end
 end
 
@@ -373,7 +375,7 @@ end
 
 local function fireProjectiles()
 	for _ = 1, Config.ProjectileAmount do
-		fireProjectile()
+		task.spawn(fireProjectile)
 	end
 end
 

@@ -68,9 +68,7 @@ local BENCHMARK_COOLDOWN = 2.5
 local FastCastModule = ReplicatedStorage:WaitForChild("FastCast2")
 
 local FastCast = require(FastCastModule)
-local FastCastEnums = require(
-	FastCastModule:WaitForChild("FastCastEnums")
-)
+local FastCastEnums = require(FastCastModule:WaitForChild("FastCastEnums"))
 
 --// Objects
 
@@ -361,7 +359,7 @@ end
 
 local function fireProjectiles()
 	for _ = 1, Config.ProjectileAmount do
-		fireProjectile()
+		task.spawn(fireProjectile)
 	end
 end
 
@@ -369,13 +367,15 @@ end
 
 local function cleanupCasts()
 	for i = #ActiveCasts, 1, -1 do
-		local cast = ActiveCasts[i]
+		task.spawn(function()
+			local cast = ActiveCasts[i]
 
-		if cast then
-			FastCast:TerminateCast(cast)
-		end
+			if cast then
+				FastCast:TerminateCast(cast)
+			end
 
-		ActiveCasts[i] = nil
+			ActiveCasts[i] = nil
+		end)
 	end
 end
 
