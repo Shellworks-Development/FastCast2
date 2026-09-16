@@ -341,7 +341,7 @@ end
 local function GetEvent(): QueuedEvent
 	eventPoolCount += 1
 	if eventPoolCount > #eventPool then
-		eventPool[eventPoolCount] = { 0, 0, nil }
+		eventPool[eventPoolCount] = { 0, 0, nil :: any }
 	end
 	return eventPool[eventPoolCount]
 end
