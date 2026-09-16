@@ -679,7 +679,21 @@ local function FireQueuedEvents()
 				callback(cast)
 			end
 
-			caster.ActiveCastCleaner:Fire(cast.ID)
+			-- Inline cleanup (no BindableEvent needed, we're on main thread)
+			local rayInfo = casts_RayInfo[castID]
+			if rayInfo then
+				local cosmetic = rayInfo.CosmeticBulletObject
+				if cosmetic then
+					local cache = BaseCastRef.ObjectCacheInstance
+					if cache then
+						cache:ReturnPart(cosmetic)
+					else
+						cosmetic:Destroy()
+					end
+				end
+			end
+			ActivesRef[castID] = nil
+			ParallelSimulation_Unregister(castID)
 		end
 	end
 end

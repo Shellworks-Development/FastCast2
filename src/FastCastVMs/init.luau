@@ -80,8 +80,7 @@ function Dispatcher.Init(newContainerParent : Instance, VMContainerName : string
 
 	-- Init
 
-	local Actor = Instance.new("Actor")
-	Actor:SetAttribute("Tasks", 0)		
+	local Actor = Instance.new("Actor")		
 
 	local Controller
 	if IS_SERVER then

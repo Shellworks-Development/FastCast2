@@ -843,7 +843,7 @@ function FastCast:TerminateCast(cast: vaildcast)
 		if eventsCfg and eventsCfg.UseCastTerminating then
 			caster.Output:Fire("CastTerminating", cast)
 		end
-		caster.ActiveCastCleaner:Fire(cast.ID)
+		caster.Actor:SendMessage("Cleanup", cast.ID)
 	end
 end
 

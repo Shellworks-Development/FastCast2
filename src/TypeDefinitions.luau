@@ -464,14 +464,14 @@ export type SphereCastRayInfo = {
 }
 
 --[=[
-	@type BaseCastData { Output: BindableEvent, ActiveCastCleaner: BindableEvent, ObjectCache: BindableFunction?, CacheHolder: any?, SyncChange : BindableEvent }
+	@type BaseCastData { Output: BindableEvent, Actor: Actor, ObjectCache: BindableFunction?, CacheHolder: any?, SyncChange : BindableEvent }
 	@within TypeDefinitions
 
 	Data stored on the caster that ActiveCasts reference.
 ]=]
 export type BaseCastData = {
 	Output: BindableEvent,
-	ActiveCastCleaner: BindableEvent,
+	Actor: Actor,
 	CacheHolder: any?,
 	SyncChange : BindableEvent
 }

@@ -25,7 +25,6 @@ local DEFAULT_CACHE_HOLDER = workspace
 
 local Actor = nil
 local Output = nil
-local ActiveCastCleaner: BindableEvent = nil
 local ObjectCacheInstance: any = nil
 local Motor6DCacheInstance: any = nil
 local NextProjectileID = 0
@@ -57,8 +56,14 @@ local function TerminateCast(cast: any, castTerminatingFunction: TypeDef.OnCastT
 		castTerminatingFunction((cast :: any))
 	end
 
-	cast.Caster.ActiveCastCleaner:Fire(cast.ID)
-
+	-- Inline cleanup (we're inside the Actor)
+	if cast.RayInfo and cast.RayInfo.CosmeticBulletObject then
+		if ObjectCacheInstance then
+			ObjectCacheInstance:ReturnPart(cast.RayInfo.CosmeticBulletObject)
+		else
+			cast.RayInfo.CosmeticBulletObject:Destroy()
+		end
+	end
 	table.clear(cast :: any)
 end
 
@@ -75,11 +80,8 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 	local self = setmetatable({}, BaseCast)
 	Actor = BindableOutput.Parent
 	self.Actives = {}
+	self.Actor = Actor
 	Output = BindableOutput
-
-	local BindableCleaner = Instance.new("BindableEvent")
-	BindableCleaner.Name = "ActiveCastDestroyer"
-	BindableCleaner.Parent = Actor
 
 	if Data.useObjectCache then
 		local objectCacheArgs = Data.objectCacheArgs or {}
@@ -94,14 +96,14 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 		ObjectCacheInstance = ObjectCache.new(objectCacheArgs.Template, objectCacheArgs.CacheSize, objectCacheArgs.CacheHolder) :: any
 	end
 
+	self.ObjectCacheInstance = ObjectCacheInstance
+
 	CurrentMovementMode = Data.movementMode or "BulkMoveTo"
 	if CurrentMovementMode == "Motor6D" then
 		Motor6DCacheInstance = Motor6DCache.new()
 	end
 
-	ActiveCastCleaner = BindableCleaner
-
-	ActiveCastCleaner.Event:Connect(function(activeCastID: number)
+	Actor:BindToMessage("Cleanup", function(activeCastID: number)
 		if self.Actives[activeCastID] then
 			local cast = self.Actives[activeCastID]
 			if cast.RayInfo and cast.RayInfo.CosmeticBulletObject then
@@ -114,7 +116,6 @@ function BaseCast.Init(BindableOutput: BindableEvent, Data: any)
 			end
 			self.Actives[activeCastID] = nil
 			ParallelSimulation.Unregister(activeCastID)
-			Actor:SetAttribute("Tasks", Actor:GetAttribute("Tasks") - 1)
 		end
 	end)
 
@@ -175,12 +176,10 @@ function BaseCast:Raycast(
 	Velocity: Vector3 | number,
 	Behavior: TypeDef.FastCastBehavior
 )
-	Actor:SetAttribute("Tasks", Actor:GetAttribute("Tasks") + 1)
 	NextProjectileID += 1
 
 	local cast = ActiveCast.createCastData({
 		Output = Output,
-		ActiveCastCleaner = ActiveCastCleaner,
 		SyncChange = SyncChanges,
 		CacheHolder = ObjectCacheInstance and ObjectCacheInstance.CacheHolder
 	}, NextProjectileID, Origin, Direction, Velocity, Behavior, FastCastEventsModule, {
@@ -239,12 +238,10 @@ function BaseCast:Blockcast(
 	Velocity: Vector3 | number,
 	Behavior: TypeDef.FastCastBehavior
 )
-	Actor:SetAttribute("Tasks", Actor:GetAttribute("Tasks") + 1)
 	NextProjectileID += 1
 
 	local cast = ActiveCast.createCastData({
 		Output = Output,
-		ActiveCastCleaner = ActiveCastCleaner,
 		SyncChange = SyncChanges,
 		CacheHolder = ObjectCacheInstance and ObjectCacheInstance.CacheHolder
 	}, NextProjectileID, Origin, Direction, Velocity, Behavior, FastCastEventsModule, {
@@ -284,12 +281,10 @@ function BaseCast:Spherecast(
 	Velocity: Vector3 | number,
 	Behavior: TypeDef.FastCastBehavior
 )
-	Actor:SetAttribute("Tasks", Actor:GetAttribute("Tasks") + 1)
 	NextProjectileID += 1
 
 	local cast = ActiveCast.createCastData({
 		Output = Output,
-		ActiveCastCleaner = ActiveCastCleaner,
 		SyncChange = SyncChanges,
 		CacheHolder = ObjectCacheInstance and ObjectCacheInstance.CacheHolder
 	}, NextProjectileID, Origin, Direction, Velocity, Behavior, FastCastEventsModule, {
