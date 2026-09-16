@@ -59,6 +59,12 @@ local EVT_HIT = 2
 local EVT_PIERCED = 3
 local EVT_CAST_TERMINATING = 4
 
+--[[
+	Shoutout to DrSinek for some code
+]]
+local EPSILON = 1e-6
+local RAY_SEARCH_OFFSET = 1e-4
+
 type QueuedEvent = { number | string | { any } }
 -- Layout: { castID, eventType, args }
 -- args is a reusable table { arg1, arg2, ... }
@@ -356,69 +362,140 @@ local function GetVis(): QueuedVis
 	return visPool[visPoolCount]
 end
 
+-- Pooled visualization data tables (avoids per-frame allocations)
+-- Hit/pierce data layout: { atCF :: CFrame, wasPierce :: boolean, sub :: boolean }
+-- Segment data layout: { castStartCFrame :: CFrame, sub :: boolean }
+local hitVisPool: { { any } } = {}
+local hitVisPoolCount: number = 0
+
+local segVisPool: { { any } } = {}
+local segVisPoolCount: number = 0
+
+local function GetHitVisData(): { any }
+	hitVisPoolCount += 1
+	if hitVisPoolCount > #hitVisPool then
+		-- NOTE: Do not change ":: any" I just hate annoying warning
+		hitVisPool[hitVisPoolCount] = { nil :: any, false, false }
+	end
+	return hitVisPool[hitVisPoolCount]
+end
+
+local function GetSegVisData(): { any }
+	segVisPoolCount += 1
+	if segVisPoolCount > #segVisPool then
+		-- NOTE: Do not change ":: any" I just hate annoying warning
+		segVisPool[segVisPoolCount] = { nil :: any, false }
+	end
+	return segVisPool[segVisPoolCount]
+end
+
 local function ResetPools()
 	argsPoolCount = 0
 	eventPoolCount = 0
 	visPoolCount = 0
+	hitVisPoolCount = 0
+	segVisPoolCount = 0
 end
 
 -- ============================================================================
 -- Queued visualizations (flat, allocation-free)
 -- ============================================================================
 
-local function QueueVisualize(
+-- Hit/pierce visualization: pass fields directly, data table is pooled
+local function QueueVisualizeHit(
 	castID: number,
-	data: QueuedVisualizeCastData | QueuedVisualizeHitData
+	atCF: CFrame,
+	wasPierce: boolean,
+	sub: boolean
 )
 	if not casts_VisualizeCasts[castID] then
 		return
 	end
 
+	local data = GetHitVisData()
+	data[1] = atCF
+	data[2] = wasPierce
+	data[3] = sub
+
 	queuedVisCount += 1
 	local entry = GetVis()
 	entry[1] = castID
 	entry[2] = data
+	entry[3] = 1 -- tag: 1 = hit data
 	queuedVisualizes[queuedVisCount] = entry
 end
+
+-- Segment visualization: pass fields directly, data table is pooled
+local function QueueVisualizeSegment(
+	castID: number,
+	castStartCFrame: CFrame,
+	sub: boolean
+)
+	if not casts_VisualizeCasts[castID] then
+		return
+	end
+
+	local data = GetSegVisData()
+	data[1] = castStartCFrame
+	data[2] = sub
+
+	queuedVisCount += 1
+	local entry = GetVis()
+	entry[1] = castID
+	entry[2] = data
+	entry[3] = 2 -- tag: 2 = segment data
+	queuedVisualizes[queuedVisCount] = entry
+end
+
+-- Reusable variant table (consumed synchronously, safe to reuse)
+local reusableVariant = {} :: CastVisualizerVariants
 
 local function FireQueuedVisualizes()
 	for i = 1, queuedVisCount do
 		local entry = queuedVisualizes[i]
 		local castID = entry[1] :: number
 		local data = entry[2]
+		local dataTag = entry[3] :: number
 
 		local settings = casts_VisualizeCastSettings[castID]
 		if not settings then
 			continue
 		end
 
-		-- Hit visualization
-		if (data :: any).atCF then
+		-- Hit visualization (tag 1)
+		if dataTag == 1 then
+			local atCF = data[1] :: CFrame
+			local wasPierce = data[2] :: boolean
+			local sub = data[3] :: boolean
+
 			if DebugLogging.Hit
-				and not (data :: QueuedVisualizeHitData).wasPierce
-				and not (data :: QueuedVisualizeHitData).sub
+				and not wasPierce
+				and not sub
 			then
 				print("Hit was successful. Terminating.")
 			end
 
 			if DebugLogging.Pierced
-				and (data :: QueuedVisualizeHitData).wasPierce
-				and not (data :: QueuedVisualizeHitData).sub
+				and wasPierce
+				and not sub
 			then
 				print("Piercing function returned TRUE to pierce this part.")
 			end
 
 			DbgVisualizeHit(
-				(data :: QueuedVisualizeHitData).atCF,
-				(data :: QueuedVisualizeHitData).wasPierce,
+				atCF,
+				wasPierce,
 				settings
 			)
 
 			continue
 		end
 
-		-- Segment visualization
-		if DebugLogging.Segment and (data :: QueuedVisualizeCastData).sub then
+		-- Segment visualization (tag 2)
+		local castStartCFrame = data[1] :: CFrame
+		local sub = data[2] :: boolean
+
+		if DebugLogging.Segment and sub then
 			print("Subcast visualization")
 		end
 
@@ -429,26 +506,19 @@ local function FireQueuedVisualizes()
 			continue
 		end
 
-		local variant: CastVisualizerVariants
-
+		-- Reuse single variant table (consumed synchronously)
 		if castType == EnumCastTypes.Raycast then
-			variant = {
-				castLength = casts_RayDisplacement[castID] or 1
-			}
+			reusableVariant.castLength = casts_RayDisplacement[castID] or 1
 		elseif castType == EnumCastTypes.Blockcast then
-			variant = {
-				size = (casts_CastVariant[castID] :: BlockcastVariant).Size
-			}
+			reusableVariant.size = (casts_CastVariant[castID] :: BlockcastVariant).Size
 		else
-			variant = {
-				radius = (casts_CastVariant[castID] :: SpherecastVariant).Radius
-			}
+			reusableVariant.radius = (casts_CastVariant[castID] :: SpherecastVariant).Radius
 		end
 
 		visualizer(
-			(data :: QueuedVisualizeCastData).castStartCFrame,
+			castStartCFrame,
 			settings,
-			variant
+			reusableVariant
 		)
 	end
 end
@@ -710,11 +780,12 @@ local function QueueHit(
 		casts_RayInfo[id].CosmeticBulletObject
 	)
 
-	QueueVisualize(id, {
-		atCF = CFrame.new(result.Position),
-		wasPierce = false,
-		sub = sub
-	})
+	QueueVisualizeHit(
+		id,
+		CFrame.new(result.Position),
+		false,
+		sub
+	)
 
 	QueueEvent(
 		id,
@@ -737,11 +808,12 @@ local function QueuePierce(
 		casts_RayInfo[id].CosmeticBulletObject
 	)
 
-	QueueVisualize(id, {
-		atCF = CFrame.new(result.Position),
-		wasPierce = true,
-		sub = sub
-	})
+	QueueVisualizeHit(
+		id,
+		CFrame.new(result.Position),
+		true,
+		sub
+	)
 end
 
 local function ShouldPierce(
@@ -828,21 +900,27 @@ local function ResimulateHit(
 
 		local subDirection = subVelocity * timeIncrement
 
+		-- Offset ray origin slightly in the direction of travel
+		-- to prevent re-hitting the same surface after a pierce
+		local subOrigin = subPosition
+			+ subVelocity.Unit * RAY_SEARCH_OFFSET
+
 		local subResult = castHandler(
 			targetWorldRoot,
-			subPosition,
+			subOrigin,
 			subDirection,
 			casts_RayInfo[id].Parameters,
 			casts_CastVariant[id]
 		)
 
-		QueueVisualize(id, {
-			castStartCFrame = CFrame.new(
+		QueueVisualizeSegment(
+			id,
+			CFrame.new(
 				subPosition,
 				subPosition + subVelocity
 			),
-			sub = true
-		})
+			true
+		)
 
 		if not subResult then
 			continue
@@ -939,6 +1017,11 @@ local function SimulateCast(
 	)
 
 	local displacement = currentPoint - lastPoint
+	
+	if displacement.Magnitude <= EPSILON then
+		casts_DistanceCovered[id] += displacement.Magnitude
+		return
+	end
 
 	local worldRoot = rayInfo.WorldRoot
 	local handler = castHandlers[variant.CastType]
@@ -981,7 +1064,7 @@ local function SimulateCast(
 		id,
 		EVT_LENGTH_CHANGED,
 		lastPoint,
-		direction.Unit,
+		if direction ~= Vector3.zero then direction.Unit else direction,
 		rayDisplacement,
 		velocity,
 		rayInfo.CosmeticBulletObject
@@ -990,13 +1073,14 @@ local function SimulateCast(
 	casts_DistanceCovered[id] += rayDisplacement
 
 	if delta > 0 then
-		QueueVisualize(id, {
-			castStartCFrame = CFrame.new(
+		QueueVisualizeSegment(
+			id,
+			CFrame.new(
 				lastPoint,
 				lastPoint + direction
 			),
-			sub = false
-		})
+			false
+		)
 	end
 
 	-- ------------------------------------------------------------------------
