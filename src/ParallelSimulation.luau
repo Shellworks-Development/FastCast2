@@ -1522,15 +1522,13 @@ function ParallelSimulation.Start()
 		warn("[FastCast2] ParallelSimulation already started.")
 		return
 	end
-
 	--[[
-		You can edit RunService event, if you want
+		You can edit Hz60, Hz30, Hz15, Hz7_5, Hz5, Hz3, Hz1 here, if you want
 	]]
-	if RS:IsClient() then
-		ParallelSimulation.Connection = RS.PreSimulation:ConnectParallel(UpdateCasts)
-	else
-		ParallelSimulation.Connection = RS.Heartbeat:ConnectParallel(UpdateCasts)
-	end
+	ParallelSimulation.Connection = RS:BindToSimulation(function(dt)
+		task.desynchronize()
+		UpdateCasts(dt)
+	end, Enum.StepFrequency.Hz60)
 end
 
 function ParallelSimulation.Stop()

@@ -1424,13 +1424,12 @@ function SerialSimulation.Start()
 	end
 
 	--[[
-		You can edit RunService event, if you want
+		You can edit Hz60, Hz30, Hz15, Hz7_5, Hz5, Hz3, Hz1 here, if you want
 	]]
-	if RS:IsClient() then
-		SerialSimulation.Connection = RS.PreSimulation:Connect(UpdateCasts)
-	else
-		SerialSimulation.Connection = RS.Heartbeat:Connect(UpdateCasts)
-	end
+	SerialSimulation.Connection = RS:BindToSimulation(function(dt)
+		task.desynchronize()
+		UpdateCasts(dt)
+	end, Enum.StepFrequency.Hz60)
 end
 
 function SerialSimulation.Stop()
