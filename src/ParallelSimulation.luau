@@ -876,6 +876,8 @@ local function ResimulateHit(
 		)
 	end
 
+	local lastPierced = false
+
 	for segmentIndex = 1, segmentCount do
 		if casts_CancelHighResCast[id] then
 			casts_CancelHighResCast[id] = false
@@ -900,10 +902,12 @@ local function ResimulateHit(
 
 		local subDirection = subVelocity * timeIncrement
 
-		-- Offset ray origin slightly in the direction of travel
-		-- to prevent re-hitting the same surface after a pierce
-		local subOrigin = subPosition
-			+ subVelocity.Unit * RAY_SEARCH_OFFSET
+		-- Only offset after the previous subcast pierced
+		local subOrigin = if lastPierced
+			then subPosition + subVelocity.Unit * RAY_SEARCH_OFFSET
+			else subPosition
+
+		lastPierced = false
 
 		local subResult = castHandler(
 			targetWorldRoot,
@@ -939,6 +943,7 @@ local function ResimulateHit(
 				true
 			)
 
+			lastPierced = true
 			continue
 		end
 
