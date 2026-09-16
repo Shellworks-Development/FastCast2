@@ -53,10 +53,15 @@ type CastVisualizerVariants =
 	| BlockVisualizerVariant
 	| SphereVisualizerVariant
 
-type QueuedEventData = {
-	eventType: string,
-	args: { any }
-}
+-- Event type constants (numeric IDs avoid string comparison in hot path)
+local EVT_LENGTH_CHANGED = 1
+local EVT_HIT = 2
+local EVT_PIERCED = 3
+local EVT_CAST_TERMINATING = 4
+
+type QueuedEvent = { number | string | { any } }
+-- Layout: { castID, eventType, args }
+-- args is a reusable table { arg1, arg2, ... }
 
 type QueuedVisualizeCastData = {
 	castStartCFrame: CFrame,
@@ -68,6 +73,8 @@ type QueuedVisualizeHitData = {
 	wasPierce: boolean,
 	sub: boolean
 }
+
+type QueuedVis = { any }
 
 -- ============================================================================
 -- State
@@ -108,10 +115,15 @@ local casts_ActiveMotor6Ds = {} :: { [number]: Motor6D }
 local casts_ID = {} :: { number }
 local casts_ID_Index = {} :: { [number]: number }
 
-local queuedEvents: { [number]: { QueuedEventData } } = {}
-local queuedVisualizes: {
-	[number]: { QueuedVisualizeCastData | QueuedVisualizeHitData }
-} = {}
+-- Flat event queue: { castID, eventType, argsTable }
+-- Reused every frame via table.clear
+local queuedEvents: { QueuedEvent } = {}
+local queuedEventsCount: number = 0
+
+-- Flat visualization queue: { castID, data }
+-- Reused every frame via table.clear
+local queuedVisualizes: { QueuedVis } = {}
+local queuedVisCount: number = 0
 
 local ActivesRef: any = nil
 local BaseCastRef: any = nil
@@ -308,6 +320,53 @@ local Visualizers = {
 -- Queued visualization
 -- ============================================================================
 
+-- ============================================================================
+-- Pre-allocated pools (reused every frame, never freed)
+-- ============================================================================
+
+local argsPool: { { any } } = {}
+local argsPoolCount: number = 0
+
+local eventPool: { QueuedEvent } = {}
+local eventPoolCount: number = 0
+
+local function GetArgs(): { any }
+	argsPoolCount += 1
+	if argsPoolCount > #argsPool then
+		argsPool[argsPoolCount] = {}
+	end
+	return argsPool[argsPoolCount]
+end
+
+local function GetEvent(): QueuedEvent
+	eventPoolCount += 1
+	if eventPoolCount > #eventPool then
+		eventPool[eventPoolCount] = { 0, 0, nil }
+	end
+	return eventPool[eventPoolCount]
+end
+
+local visPool: { QueuedVis } = {}
+local visPoolCount: number = 0
+
+local function GetVis(): QueuedVis
+	visPoolCount += 1
+	if visPoolCount > #visPool then
+		visPool[visPoolCount] = { 0, nil }
+	end
+	return visPool[visPoolCount]
+end
+
+local function ResetPools()
+	argsPoolCount = 0
+	eventPoolCount = 0
+	visPoolCount = 0
+end
+
+-- ============================================================================
+-- Queued visualizations (flat, allocation-free)
+-- ============================================================================
+
 local function QueueVisualize(
 	castID: number,
 	data: QueuedVisualizeCastData | QueuedVisualizeHitData
@@ -316,233 +375,191 @@ local function QueueVisualize(
 		return
 	end
 
-	local queue = queuedVisualizes[castID]
-
-	if not queue then
-		queue = {}
-		queuedVisualizes[castID] = queue
-	end
-
-	table.insert(queue, data)
+	queuedVisCount += 1
+	local entry = GetVis()
+	entry[1] = castID
+	entry[2] = data
+	queuedVisualizes[queuedVisCount] = entry
 end
 
-local function FireQueuedVisualizes(
-	visualizes: {
-		[number]: {
-			QueuedVisualizeCastData | QueuedVisualizeHitData
-		}
-	}
-)
-	local sortedIDs = {}
-
-	for id in visualizes do
-		table.insert(sortedIDs, id)
-	end
-
-	table.sort(sortedIDs)
-
-	for _, castID in sortedIDs do
-		local list = visualizes[castID]
-
-		if not list then
-			continue
-		end
+local function FireQueuedVisualizes()
+	for i = 1, queuedVisCount do
+		local entry = queuedVisualizes[i]
+		local castID = entry[1] :: number
+		local data = entry[2]
 
 		local settings = casts_VisualizeCastSettings[castID]
-
 		if not settings then
 			continue
 		end
 
-		for _, data in list do
-			-- Hit visualization
-			if data.atCF then
-				if DebugLogging.Hit 
-					and not data.wasPierce 
-					and not data.sub 
-				then
-					print("Hit was successful. Terminating.")
-				end
-
-				if DebugLogging.Pierced 
-					and data.wasPierce 
-					and not data.sub 
-				then
-					print("Piercing function returned TRUE to pierce this part.")
-				end
-
-				DbgVisualizeHit(
-					data.atCF,
-					data.wasPierce,
-					settings
-				)
-
-				continue
+		-- Hit visualization
+		if (data :: any).atCF then
+			if DebugLogging.Hit
+				and not (data :: QueuedVisualizeHitData).wasPierce
+				and not (data :: QueuedVisualizeHitData).sub
+			then
+				print("Hit was successful. Terminating.")
 			end
 
-			-- Segment visualization
-			if DebugLogging.Segment and data.sub then
-				print("Subcast visualization")
+			if DebugLogging.Pierced
+				and (data :: QueuedVisualizeHitData).wasPierce
+				and not (data :: QueuedVisualizeHitData).sub
+			then
+				print("Piercing function returned TRUE to pierce this part.")
 			end
 
-			local castType = casts_CastType[castID]
-			local visualizer = Visualizers[castType]
-
-			if not visualizer then
-				continue
-			end
-
-			local variant: CastVisualizerVariants
-
-			if castType == EnumCastTypes.Raycast then
-				variant = {
-					castLength = casts_RayDisplacement[castID] or 1
-				}
-			elseif castType == EnumCastTypes.Blockcast then
-				variant = {
-					size = (casts_CastVariant[castID] :: BlockcastVariant).Size
-				}
-			else
-				variant = {
-					radius = (casts_CastVariant[castID] :: SpherecastVariant).Radius
-				}
-			end
-
-			visualizer(
-				data.castStartCFrame,
-				settings,
-				variant
+			DbgVisualizeHit(
+				(data :: QueuedVisualizeHitData).atCF,
+				(data :: QueuedVisualizeHitData).wasPierce,
+				settings
 			)
+
+			continue
 		end
+
+		-- Segment visualization
+		if DebugLogging.Segment and (data :: QueuedVisualizeCastData).sub then
+			print("Subcast visualization")
+		end
+
+		local castType = casts_CastType[castID]
+		local visualizer = Visualizers[castType]
+
+		if not visualizer then
+			continue
+		end
+
+		local variant: CastVisualizerVariants
+
+		if castType == EnumCastTypes.Raycast then
+			variant = {
+				castLength = casts_RayDisplacement[castID] or 1
+			}
+		elseif castType == EnumCastTypes.Blockcast then
+			variant = {
+				size = (casts_CastVariant[castID] :: BlockcastVariant).Size
+			}
+		else
+			variant = {
+				radius = (casts_CastVariant[castID] :: SpherecastVariant).Radius
+			}
+		end
+
+		visualizer(
+			(data :: QueuedVisualizeCastData).castStartCFrame,
+			settings,
+			variant
+		)
 	end
+
+	queuedVisCount = 0
 end
 
 -- ============================================================================
--- Queued events
+-- Queued events (flat, allocation-free)
 -- ============================================================================
 
 local function QueueEvent(
 	castID: number,
-	eventType: string,
+	eventType: number,
 	...: any
 )
-	local queue = queuedEvents[castID]
-
-	if not queue then
-		queue = {}
-		queuedEvents[castID] = queue
+	local args = GetArgs()
+	local n = select("#", ...)
+	for i = 1, n do
+		args[i] = select(i, ...)
+	end
+	-- Clear leftover args from previous use
+	for i = n + 1, #args do
+		args[i] = nil
 	end
 
-	table.insert(queue, {
-		eventType = eventType,
-		args = { ... }
-	})
+	queuedEventsCount += 1
+	local entry = GetEvent()
+	entry[1] = castID
+	entry[2] = eventType
+	entry[3] = args
+	queuedEvents[queuedEventsCount] = entry
 end
 
-local function FireQueuedEvents(
-	events: { [number]: { QueuedEventData } }
-)
-	local sortedIDs = {}
+local function FireQueuedEvents()
+	for i = 1, queuedEventsCount do
+		local entry = queuedEvents[i]
+		local castID = entry[1] :: number
+		local eventType = entry[2] :: number
+		local args = entry[3] :: { any }
 
-	for id in events do
-		table.insert(sortedIDs, id)
-	end
-
-	table.sort(sortedIDs)
-
-	for _, castID in sortedIDs do
-		local eventList = events[castID]
-
-		if not eventList then
+		local cast = ActivesRef[castID]
+		if not cast then
 			continue
 		end
 
-		for _, event in eventList do
-			local cast = ActivesRef[castID]
+		local eventConfig = casts_FastCastEventsConfig[castID]
 
-			if not cast then
-				continue
+		if eventType == EVT_LENGTH_CHANGED then
+			if eventConfig and eventConfig.UseLengthChanged then
+				local lengthChanged = FastCastEvents.LengthChanged
+				if lengthChanged then
+					lengthChanged(
+						cast,
+						args[1],
+						args[2],
+						args[3],
+						args[4],
+						args[5]
+					)
+				end
 			end
 
-			local args = event.args
-
-			local eventConfig = casts_FastCastEventsConfig[castID]
-
-			local eventType = event.eventType
-
-			if eventType == "LengthChanged" then
-				local lastPoint = args[1]
-				local rayDirection = args[2]
-				local displacement = args[3]
-				local velocity = args[4]
-				local cosmetic = args[5]
-
-				if eventConfig and eventConfig.UseLengthChanged then
-
-					local lengthChanged = FastCastEvents.LengthChanged
-					if lengthChanged then
-						lengthChanged(
-							cast,
-							lastPoint,
-							rayDirection,
-							displacement,
-							velocity,
-							cosmetic
-						)
-					end
+		elseif eventType == EVT_HIT then
+			if eventConfig and eventConfig.UseHit then
+				local Hit = FastCastEvents.Hit
+				if Hit then
+					Hit(
+						cast,
+						args[1],
+						args[2],
+						args[3]
+					)
 				end
-
-			elseif eventType == "Hit" then
-				local result = args[1]
-				local velocity = args[2]
-				local cosmetic = args[3]
-
-				if eventConfig and eventConfig.UseHit then
-
-					local Hit = FastCastEvents.Hit
-					if Hit then
-						Hit(
-							cast,
-							result,
-							velocity,
-							cosmetic
-						)
-					end
-				end
-
-			elseif eventType == "Pierced" then
-				local result = args[1]
-				local velocity = args[2]
-				local cosmetic = args[3]
-
-				if eventConfig and eventConfig.UsePierced then
-
-					local Pierced = FastCastEvents.Pierced
-					if Pierced then
-						Pierced(
-							cast,
-							result,
-							velocity,
-							cosmetic
-						)
-					end
-				end
-
-			elseif eventType == "CastTerminating" then
-				local callback = args[1]
-				if callback then
-					callback(cast)
-				end
-				BaseCastRef._TerminateCast(castID)
-				SerialSimulation_Unregister(castID)
 			end
+
+		elseif eventType == EVT_PIERCED then
+			if eventConfig and eventConfig.UsePierced then
+				local Pierced = FastCastEvents.Pierced
+				if Pierced then
+					Pierced(
+						cast,
+						args[1],
+						args[2],
+						args[3]
+					)
+				end
+			end
+
+		elseif eventType == EVT_CAST_TERMINATING then
+			local callback = args[1]
+			if callback then
+				callback(cast)
+			end
+			BaseCastRef._TerminateCast(castID)
+			SerialSimulation_Unregister(castID)
 		end
 	end
+
+	ResetPools()
+	queuedEventsCount = 0
 end
 
 -- ============================================================================
 -- Movement
 -- ============================================================================
+
+-- Pre-allocated arrays for BulkMoveTo (reused every frame)
+local bulkParts: { BasePart } = {}
+local bulkCframes: { CFrame } = {}
+local bulkCount: number = 0
 
 local function BulkMoveTo()
 	if CurrentMovementMode ~= "BulkMoveTo"
@@ -551,23 +568,23 @@ local function BulkMoveTo()
 		return
 	end
 
-	local parts = table.create(#casts_ID)
-	local cframes = table.create(#casts_ID)
+	bulkCount = 0
 
 	for _, id in casts_ID do
 		local rayInfo = casts_RayInfo[id]
 		local cosmetic = rayInfo and rayInfo.CosmeticBulletObject
 
 		if cosmetic and cosmetic.Parent then
-			table.insert(parts, cosmetic)
-			table.insert(cframes, casts_CFrame[id])
+			bulkCount += 1
+			bulkParts[bulkCount] = cosmetic
+			bulkCframes[bulkCount] = casts_CFrame[id]
 		end
 	end
 
-	if #parts > 0 then
+	if bulkCount > 0 then
 		workspace:BulkMoveTo(
-			parts,
-			cframes,
+			bulkParts,
+			bulkCframes,
 			Enum.BulkMoveMode.FireCFrameChanged
 		)
 	end
@@ -600,7 +617,7 @@ local function QueueHit(
 )
 	QueueEvent(
 		id,
-		"Hit",
+		EVT_HIT,
 		result,
 		velocity,
 		casts_RayInfo[id].CosmeticBulletObject
@@ -614,7 +631,7 @@ local function QueueHit(
 
 	QueueEvent(
 		id,
-		"CastTerminating",
+		EVT_CAST_TERMINATING,
 		castTerminatingfn
 	)
 end
@@ -627,7 +644,7 @@ local function QueuePierce(
 )
 	QueueEvent(
 		id,
-		"Pierced",
+		EVT_PIERCED,
 		result,
 		velocity,
 		casts_RayInfo[id].CosmeticBulletObject
@@ -875,7 +892,7 @@ local function SimulateCast(
 
 	QueueEvent(
 		id,
-		"LengthChanged",
+		EVT_LENGTH_CHANGED,
 		lastPoint,
 		direction.Unit,
 		rayDisplacement,
@@ -903,7 +920,7 @@ local function SimulateCast(
 		if casts_DistanceCovered[id] >= casts_MaxDistance[id] then
 			QueueEvent(
 				id,
-				"CastTerminating"
+				EVT_CAST_TERMINATING
 			)
 		end
 
@@ -952,7 +969,7 @@ local function SimulateCast(
 		if casts_IsActivelyResimulating[id] then
 			QueueEvent(
 				id,
-				"CastTerminating",
+				EVT_CAST_TERMINATING,
 				castTerminatingfn
 			)
 
@@ -1005,7 +1022,7 @@ local function SimulateAlwaysHighFidelity(
 	if casts_IsActivelyResimulating[id] then
 		QueueEvent(
 			id,
-			"CastTerminating"
+			EVT_CAST_TERMINATING
 		)
 
 		warn(
@@ -1198,8 +1215,6 @@ function SerialSimulation_Register(cast: any)
 				BaseCastRef._GetMotor6D(cosmetic)
 		end
 	end
-
-	queuedEvents[id] = {}
 end
 
 function SerialSimulation_Unregister(castID: number)
@@ -1253,9 +1268,6 @@ function SerialSimulation_Unregister(castID: number)
 		table.remove(casts_ID, #casts_ID)
 		casts_ID_Index[castID] = nil
 	end
-
-	queuedEvents[castID] = nil
-	queuedVisualizes[castID] = nil
 end
 
 -- ============================================================================
@@ -1341,15 +1353,8 @@ local function UpdateCasts(delta: number)
 				delta
 			)
 		end
-	end
 
-	-- =========================================================================
-	-- Write-back SoA -> ActiveCast so ActivesRef[id] has current values
-	-- =========================================================================
-
-	for _, id in casts_ID do
-		local cast = ActivesRef[id]
-
+		-- Write-back SoA -> ActiveCast (merged to avoid second iteration)
 		if cast then
 			cast.StateInfo.TotalRuntime = casts_TotalRunTime[id]
 			cast.StateInfo.DistanceCovered = casts_DistanceCovered[id]
@@ -1364,19 +1369,8 @@ local function UpdateCasts(delta: number)
 	UpdateMotor6Ds()
 	BulkMoveTo()
 
-	local eventsToProcess = queuedEvents
-	queuedEvents = {}
-
-	local visualizesToProcess = queuedVisualizes
-	queuedVisualizes = {}
-
-	FireQueuedVisualizes(
-		visualizesToProcess
-	)
-
-	FireQueuedEvents(
-		eventsToProcess
-	)
+	FireQueuedVisualizes()
+	FireQueuedEvents()
 end
 
 -- ============================================================================
@@ -1445,6 +1439,24 @@ function SerialSimulation._UpdateEvent(name: string, newEventfn: (any) -> ())
 	end
 
 	FastCastEvents[name] = newEventfn
+end
+
+function SerialSimulation.QueueEvent(castID: number, eventType: string, ...: any)
+	-- Public wrapper for external callers (e.g. init.luau TerminateCast)
+	-- Map string event type to numeric constant
+	local numericType: number
+	if eventType == "CastTerminating" then
+		numericType = EVT_CAST_TERMINATING
+	elseif eventType == "Hit" then
+		numericType = EVT_HIT
+	elseif eventType == "Pierced" then
+		numericType = EVT_PIERCED
+	elseif eventType == "LengthChanged" then
+		numericType = EVT_LENGTH_CHANGED
+	else
+		return
+	end
+	QueueEvent(castID, numericType, ...)
 end
 
 return SerialSimulation
