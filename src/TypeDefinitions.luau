@@ -491,7 +491,8 @@ export type ActiveCastData = {
 	_Destroying: boolean,
 	Type : "Raycast",
 	CFrame: CFrame,
-	ID: number | string
+	ID: number,
+	Mode: "Serial" | "Parallel",
 }
 
 --[=[
@@ -509,7 +510,8 @@ export type ActiveBlockcastData = {
 	_Destroying: boolean,
 	Type : "Blockcast",
 	CFrame: CFrame,
-	ID: number | string
+	ID: number,
+	Mode: "Serial" | "Parallel",
 }
 
 --[=[
@@ -527,7 +529,8 @@ export type ActiveSpherecastData = {
 	_Destroying: boolean,
 	Type : "Spherecast",
 	CFrame: CFrame,
-	ID: number | string
+	ID: number,
+	Mode: "Serial" | "Parallel",
 }
 
 return {}

@@ -827,6 +827,13 @@ function FastCast:TerminateCast(cast: vaildcast)
 	(cast :: any)._Destroying = true
 
 	if cast.Mode == "Serial" then
+		local eventsCfg = cast.StateInfo and cast.StateInfo.FastCastEventsConfig
+		if eventsCfg and eventsCfg.UseCastTerminating then
+			local castTerminating = SerialSimulation.GetEvent("CastTerminating")
+			if castTerminating then
+				castTerminating(cast)
+			end
+		end
 		SerialSimulation.QueueEvent(cast.ID, "CastTerminating")
 	elseif cast.Mode == "Parallel" then
 		local caster = cast.Caster

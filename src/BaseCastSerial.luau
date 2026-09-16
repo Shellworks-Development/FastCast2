@@ -240,6 +240,8 @@ Destroys the BaseCast instance and cleans up resources.
 
 ]=]
 function BaseCast.Destroy()
+	SerialSimulation.Stop()
+
 	if ObjectCacheInstance then
 		ObjectCacheInstance:Destroy()
 	end
@@ -248,7 +250,11 @@ function BaseCast.Destroy()
 		Motor6DCacheInstance:Destroy()
 	end
 
+	local castIDs = {}
 	for castID in Actives do
+		table.insert(castIDs, castID)
+	end
+	for _, castID in castIDs do
 		BaseCast._TerminateCast(castID)
 	end
 

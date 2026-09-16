@@ -567,8 +567,12 @@ local function FireQueuedEvents()
 
 		local eventConfig = casts_FastCastEventsConfig[castID]
 
+		if not eventConfig then
+			return
+		end
+
 		if eventType == EVT_LENGTH_CHANGED then
-			if eventConfig and eventConfig.UseLengthChanged then
+			if eventConfig.UseLengthChanged then
 				local lengthChanged = FastCastEvents.LengthChanged
 				if lengthChanged then
 					lengthChanged(
@@ -583,7 +587,7 @@ local function FireQueuedEvents()
 			end
 
 		elseif eventType == EVT_HIT then
-			if eventConfig and eventConfig.UseHit then
+			if eventConfig.UseHit then
 				local Hit = FastCastEvents.Hit
 				if Hit then
 					Hit(
@@ -596,7 +600,7 @@ local function FireQueuedEvents()
 			end
 
 		elseif eventType == EVT_PIERCED then
-			if eventConfig and eventConfig.UsePierced then
+			if eventConfig.UsePierced then
 				local Pierced = FastCastEvents.Pierced
 				if Pierced then
 					Pierced(
@@ -609,9 +613,13 @@ local function FireQueuedEvents()
 			end
 
 		elseif eventType == EVT_CAST_TERMINATING then
-			local castTerminating = FastCastEvents.CastTerminating
-			if castTerminating then
-				castTerminating(cast)
+			if not cast._Destroying then
+				cast._Destroying = true
+				local castTerminating = FastCastEvents.CastTerminating
+				--local eventConfig = cast.StateInfo and cast.StateInfo.FastCastEventsConfig
+				if eventConfig.UseCastTerminating and castTerminating then
+					castTerminating(cast)
+				end
 			end
 			BaseCastRef._TerminateCast(castID)
 			SerialSimulation_Unregister(castID)
@@ -1521,6 +1529,7 @@ function SerialSimulation.Stop()
 		SerialSimulation.Connection:Disconnect()
 		SerialSimulation.Connection = nil
 	end
+	ActivesRef = nil
 end
 
 function SerialSimulation._UpdateEvent(name: string, newEventfn: (any) -> ())
@@ -1529,6 +1538,10 @@ function SerialSimulation._UpdateEvent(name: string, newEventfn: (any) -> ())
 	end
 
 	FastCastEvents[name] = newEventfn
+end
+
+function SerialSimulation.GetEvent(name: string): ((any) -> ())?
+	return FastCastEvents[name]
 end
 
 function SerialSimulation.QueueEvent(castID: number, eventType: string, ...: any)
