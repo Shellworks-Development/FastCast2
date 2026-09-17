@@ -25,7 +25,7 @@ All pull requests will go through **code review** before merging.
 ### Code Review Expectations
 
 - Code should be **clean, readable, and follow existing style** (Luau typing, naming conventions, etc.)
-- New features should have **basic tests** (when applicable) or clear usage examples
+- Code should pass **Basic testing**
 - Documentation should be updated if the public API changes
 - Keep PRs **focused** - one feature/fix per pull request is ideal
 - Be prepared to make changes based on feedback
@@ -56,6 +56,11 @@ I'm not strict about changelogs, and I don't really bother writing explicit chan
 - **Be respectful** — to everyone (maintainers, other contributors, users)
 - No personal attacks, harassment, or toxic behavior
 - Keep discussions technical and constructive
+
+### Testing
+- Run the automated suite before opening a PR: `npm test` (or `lune run tests/run.luau`)
+- It runs the functional tests and benchmark matrix in Studio and uploads the report to paste.shellworks.dev; see [`tests/README.md`](tests/README.md)
+- Manual checklist / coverage reference: [`TESTS.md`](TESTS.md)
 
 ### Questions?
 

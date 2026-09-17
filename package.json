@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "test": "lune run tests/run.luau",
+    "test:no-upload": "lune run tests/run.luau --no-upload"
+  },
   "dependencies": {
     "moonwave": "^1.2.0",
     "opencode-ai": "^1.18.3"

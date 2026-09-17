@@ -1,9 +1,9 @@
 - [ ] Create multiple games, libraries, and frameworks using FastCast2, and showcase them in `docs/showcase.md` (DOCS)
 - [ ] Create a Debugger GUI for benchmarking and testing (debuggergui)
-- [ ] Add automated testing (test)
+- [ ] Add a manual test checklist MD
 - [ ] Code improvements
-- [ ] Add dynamic RunService event configuration for Caster (feats)
-- [ ] Add `BindToSimulation` and `UseFixedSimulation` (feats)
+- [ ] ~~Add dynamic RunService event configuration for Caster (feats)~~ (Cancelled)
+- [ ] Add `BindToSimulation` and `UseFixedSimulation` (changes)
 - [ ] Migration guide from FastCast Redux/FastCast (DOCS)
 - [ ] Performance guide and best practices (DOCS)
 - [ ] Common pitfalls and FAQ (DOCS)
@@ -16,5 +16,3 @@
 - [ ] Include the `.rbxl` file in the latest release (RELEASE)
 - [ ] Update Roblox Model of FastCast2 (RELEASE)
 - [ ] Update README.md (DOCS)
-- [ ] Add proper typechecking using [“t” - A Runtime Type Checker for Roblox](https://devforum.roblox.com/t/t-a-runtime-type-checker-for-roblox/139769)
-- [ ] FastCast2 fork: ParallelOnly, SerialOnly (Projects)
