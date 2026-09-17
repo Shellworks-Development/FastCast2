@@ -157,9 +157,12 @@ function Dispatcher:Allocate(Threads: number, Data: any?, Callback: (...any) -> 
 	local Actors = {}
 
 	--> Create actors
-	for _ = 1, Threads do
+	for index = 1, Threads do
 		local Actor = Template:Clone()
 		Actor.Parent = Container
+
+		-- Stable per-worker index, used to phase-offset cosmetic updates.
+		Actor:SetAttribute("FastCastWorkerIndex", #self.Threads + index)
 
 		local controller = Actor:FindFirstChild(ControllerName)
 
