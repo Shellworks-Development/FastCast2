@@ -180,6 +180,7 @@ function BaseCast:Raycast(
 
 	local cast = ActiveCast.createCastData({
 		Output = Output,
+		Actor = Actor,
 		SyncChange = SyncChanges,
 		CacheHolder = ObjectCacheInstance and ObjectCacheInstance.CacheHolder
 	}, NextProjectileID, Origin, Direction, Velocity, Behavior, FastCastEventsModule, {
@@ -242,6 +243,7 @@ function BaseCast:Blockcast(
 
 	local cast = ActiveCast.createCastData({
 		Output = Output,
+		Actor = Actor,
 		SyncChange = SyncChanges,
 		CacheHolder = ObjectCacheInstance and ObjectCacheInstance.CacheHolder
 	}, NextProjectileID, Origin, Direction, Velocity, Behavior, FastCastEventsModule, {
@@ -285,6 +287,7 @@ function BaseCast:Spherecast(
 
 	local cast = ActiveCast.createCastData({
 		Output = Output,
+		Actor = Actor,
 		SyncChange = SyncChanges,
 		CacheHolder = ObjectCacheInstance and ObjectCacheInstance.CacheHolder
 	}, NextProjectileID, Origin, Direction, Velocity, Behavior, FastCastEventsModule, {
