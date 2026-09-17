@@ -52,13 +52,26 @@ local function runSuite()
 	ensureTestSignal()
 
 	local tests = Framework.run(FunctionalTests(), cleanupLeftovers)
-	local benchmarks = Benchmarks.run()
+
+	local benchmarks = {}
+	local benchmarkError = nil
+	local benchmarkOk, benchmarkResult = pcall(function()
+		return Benchmarks.run()
+	end)
+
+	if benchmarkOk then
+		benchmarks = benchmarkResult
+	else
+		benchmarkError = tostring(benchmarkResult)
+		warn("[FastCast2] benchmark run failed: " .. benchmarkError)
+	end
 
 	return {
 		generatedAt = os.date("%Y-%m-%d %H:%M:%S"),
 		runContext = if RunService:IsStudio() then "studio" else "game",
 		tests = tests,
 		benchmarks = benchmarks,
+		benchmarkError = benchmarkError,
 	}
 end
 

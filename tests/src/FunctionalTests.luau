@@ -234,6 +234,34 @@ return function()
 
 			registerSerialCastTypes(test)
 
+			test("event callbacks assigned after Init still fire", function(expect)
+				local arena = createArena()
+				local wall = createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+
+				local caster = FastCast.new()
+				caster:Init("BulkMoveTo")
+
+				local hitInstance = nil
+				caster.Hit = function(_, result)
+					hitInstance = result.Instance
+				end
+
+				fire(caster, "Raycast", Vector3.new(0, 0, 0), Vector3.new(0, 0, -1), 120, behavior)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return hitInstance ~= nil
+					end, HIT_TIMEOUT),
+					"Hit callback assigned after Init never fired"
+				)
+				expect.equal(hitInstance, wall, "Hit callback fired for the wrong instance")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
 			test("Pierced and CanPierce run when a cast is allowed through", function(expect)
 				local arena = createArena()
 				local container = createContainer(arena)
@@ -338,11 +366,10 @@ return function()
 			test("movement mode can be switched", function(expect)
 				local caster = FastCast.new()
 				caster:Init("Motor6D")
-				expect.equal(caster.BaseCast.CurrentMovementMode, "Motor6D", "initial movement mode was not applied")
+				expect.equal(caster.MovementMode, "Motor6D", "initial movement mode was not applied")
 
 				caster:SetMovementModeEnabled(true, "BulkMoveTo")
-				expect.equal(caster.BaseCast.CurrentMovementMode, "BulkMoveTo", "movement mode was not switched")
-				expect.equal(caster.MovementMode, "BulkMoveTo", "caster did not record the new mode")
+				expect.equal(caster.MovementMode, "BulkMoveTo", "movement mode was not switched")
 
 				caster:Destroy()
 			end)

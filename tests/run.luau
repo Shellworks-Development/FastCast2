@@ -153,6 +153,13 @@ local function buildMarkdown(payload: any): string
 		benchmarkTable(benchmarks),
 	}
 
+	if payload.benchmarkError then
+		table.insert(parts, "")
+		table.insert(parts, "```")
+		table.insert(parts, tostring(payload.benchmarkError))
+		table.insert(parts, "```")
+	end
+
 	if payload.error then
 		table.insert(parts, "")
 		table.insert(parts, "## Harness error")
@@ -283,6 +290,10 @@ end
 
 if payload.error then
 	print("Harness error: " .. tostring(payload.error))
+end
+
+if payload.benchmarkError then
+	print("Benchmark error: " .. tostring(payload.benchmarkError))
 end
 
 if flags["no-upload"] then
