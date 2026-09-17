@@ -22,7 +22,7 @@ The format is based on Keep a Changelog (https://keepachangelog.com/en/1.0.0/)
 - **Motor6DCache** - Object pooling for Motor6D instances
 
 ### Changed
-NONE
+- NONE
  
 ### Fixed
 - **HighFidelityBehavior = 2 bug** - Fixed subRayDir calculation using `delta` instead of `timeIncrement`
@@ -137,18 +137,10 @@ NONE
 
 ## [0.0.3] - 2026-01-03
 
-### Added
-- Introduced testing framework components.
-- Added client-server projectile simulation.
-- Added performance testing scenarios.
-- Added unreliable packet networking support.
+- UNKNOWN
 
 ---
 
 ## [0.0.1] - 2025-11-23
 
-### Added
-- Initial release of FastCast2.
-- Core casting and blockcasting functionality.
-- Basic project structure.
-- Initial Roblox Studio test project.
+- UNKNOWN

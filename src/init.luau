@@ -151,7 +151,7 @@ FastCastSerial.__newindex = function(self, key, value)
 	if VALID_EVENTS[key] then
 		if type(value) == "function" then
 			if self.BaseCast then
-				self.BaseCast:_UpdateEvents(key, value)
+				self.BaseCast._UpdateEvents(key, value)
 			else
 				rawset(self, key, value)
 			end
@@ -517,6 +517,7 @@ function FastCastSerial:Init(
 	}
 
 	BaseCastSerial.Init(events, data)
+	self.BaseCast = BaseCastSerial
 
 	self.MovementMode = movementMode or "BulkMoveTo"
 	self.AlreadyInit = true
