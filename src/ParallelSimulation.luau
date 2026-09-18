@@ -65,10 +65,6 @@ local EVT_CAST_TERMINATING = 4
 local EPSILON = 1e-6
 local RAY_SEARCH_OFFSET = 1e-4
 
-type QueuedEvent = { number | string | { any } }
--- Layout: { castID, eventType, args }
--- args is a reusable table { arg1, arg2, ... }
-
 type QueuedVisualizeCastData = {
 	castStartCFrame: CFrame,
 	sub: boolean
@@ -126,9 +122,19 @@ local casts_ID_Index = {} :: { [number]: number }
 
 local casts_FastCastEvents = {} :: { [number]: TypeDef.FastCastEvents }
 
--- Flat event queue: { castID, eventType, argsTable }
--- Reused every frame via table.clear
-local queuedEvents: { QueuedEvent } = {}
+-- Cached per-cast "does anyone care about this event?" flags.
+-- Precomputed at registration so the hot path avoids config lookups and,
+-- more importantly, avoids queueing events nobody listens to.
+local casts_WantLengthChanged = {} :: { [number]: boolean }
+local casts_HasCosmetic = {} :: { [number]: boolean }
+local castsWithCosmetics: number = 0
+
+-- Packed metadata: f64 cast ID + u8 event type. Keep IDs lossless (no u32
+-- wraparound); Roblox values stay in the reusable argument tables below.
+-- Capacity doubles only at a new high-water mark, never during steady state.
+local EVENT_STRIDE = 9
+local eventCapacity = 256
+local eventMetadata = buffer.create(eventCapacity * EVENT_STRIDE)
 local queuedEventsCount: number = 0
 
 -- Flat visualization queue: { castID, data }
@@ -154,7 +160,7 @@ local function GetPositionAtTime(
 ): Vector3
 	return origin
 		+ initialVelocity * t
-		+ acceleration * (t ^ 2 / 2)
+		+ acceleration * (t * t * 0.5)
 end
 
 local function GetVelocityAtTime(
@@ -332,23 +338,12 @@ local Visualizers = {
 local argsPool: { { any } } = {}
 local argsPoolCount: number = 0
 
-local eventPool: { QueuedEvent } = {}
-local eventPoolCount: number = 0
-
 local function GetArgs(): { any }
 	argsPoolCount += 1
 	if argsPoolCount > #argsPool then
 		argsPool[argsPoolCount] = {}
 	end
 	return argsPool[argsPoolCount]
-end
-
-local function GetEvent(): QueuedEvent
-	eventPoolCount += 1
-	if eventPoolCount > #eventPool then
-		eventPool[eventPoolCount] = { 0, 0, nil :: any }
-	end
-	return eventPool[eventPoolCount]
 end
 
 -- Pooled records for the worker -> main event batch.
@@ -363,7 +358,6 @@ local function GetBatchRecord(): { any }
 	end
 	return batchPool[batchPoolCount]
 end
-
 local visPool: { QueuedVis } = {}
 local visPoolCount: number = 0
 
@@ -404,7 +398,6 @@ end
 
 local function ResetPools()
 	argsPoolCount = 0
-	eventPoolCount = 0
 	batchPoolCount = 0
 	visPoolCount = 0
 	hitVisPoolCount = 0
@@ -541,26 +534,35 @@ end
 -- Queued events (flat, allocation-free)
 -- ============================================================================
 
+-- Event signatures have at most five payload values. Assign all slots so
+-- nil holes cannot leave stale references behind (the # operator is undefined
+-- for sparse arrays), and avoid select/vararg loops in the hot path.
 local function QueueEvent(
 	castID: number,
 	eventType: number,
-	...: any
+	arg1: any,
+	arg2: any,
+	arg3: any,
+	arg4: any,
+	arg5: any
 )
-	queuedEventsCount += 1
-	local entry = GetEvent()
 	local args = GetArgs()
-	local n = select("#", ...)
-	for i = 1, n do
-		args[i] = select(i, ...)
+	args[1] = arg1
+	args[2] = arg2
+	args[3] = arg3
+	args[4] = arg4
+	args[5] = arg5
+
+	queuedEventsCount += 1
+	if queuedEventsCount > eventCapacity then
+		eventCapacity *= 2
+		local expanded = buffer.create(eventCapacity * EVENT_STRIDE)
+		buffer.copy(expanded, 0, eventMetadata)
+		eventMetadata = expanded
 	end
-	for i = n + 1, #args do
-		args[i] = nil
-	end
-	entry[1] = castID
-	entry[2] = eventType
-	entry[3] = args
-	entry[4] = n
-	queuedEvents[queuedEventsCount] = entry
+	local offset = (queuedEventsCount - 1) * EVENT_STRIDE
+	buffer.writef64(eventMetadata, offset, castID)
+	buffer.writeu8(eventMetadata, offset + 8, eventType)
 end
 
 local function FireQueuedEvents()
@@ -571,11 +573,10 @@ local function FireQueuedEvents()
 	local batchCaster: any = nil
 
 	for i = 1, queuedEventsCount do
-		local entry = queuedEvents[i]
-		local castID = entry[1] :: number
-		local numericType = entry[2] :: number
-		local args = entry[3] :: { any }
-		local argCount = entry[4] :: number
+		local offset = (i - 1) * EVENT_STRIDE
+		local castID = buffer.readf64(eventMetadata, offset)
+		local numericType = buffer.readu8(eventMetadata, offset + 8)
+		local args = argsPool[i]
 
 		local cast = ActivesRef[castID]
 
@@ -602,7 +603,7 @@ local function FireQueuedEvents()
 				record[1] = EVT_LENGTH_CHANGED
 				record[2] = cast
 				record[3] = args
-				record[4] = argCount
+				record[4] = 5
 				batch[batchCount] = record
 				batchCaster = caster
 			end
@@ -633,7 +634,7 @@ local function FireQueuedEvents()
 				record[1] = EVT_HIT
 				record[2] = cast
 				record[3] = args
-				record[4] = argCount
+				record[4] = 3
 				batch[batchCount] = record
 				batchCaster = caster
 			end
@@ -662,7 +663,7 @@ local function FireQueuedEvents()
 				record[1] = EVT_PIERCED
 				record[2] = cast
 				record[3] = args
-				record[4] = argCount
+				record[4] = 3
 				batch[batchCount] = record
 				batchCaster = caster
 			end
@@ -737,11 +738,34 @@ end
 local bulkParts: { Instance } = {}
 local bulkCframes: { CFrame } = {}
 local bulkCount: number = 0
+local cosmeticFrame: number = 0
+
+-- Cosmetic parts can be pushed at a lower rate than the simulation. Moving
+-- thousands of parts (and replicating their CFrames) is the single most
+-- expensive per-frame cost once cosmetics exist.
+local function ShouldUpdateCosmetics(): boolean
+	local interval = Config.CosmeticUpdateInterval or 1
+	if interval <= 1 then
+		return true
+	end
+
+	cosmeticFrame += 1
+	return cosmeticFrame % interval == 0
+end
 
 local function BulkMoveTo()
 	if CurrentMovementMode ~= "BulkMoveTo"
 		or not MovementEnabled
 	then
+		return
+	end
+
+	-- Nothing to move if no cast has a cosmetic part.
+	if castsWithCosmetics == 0 then
+		return
+	end
+
+	if not ShouldUpdateCosmetics() then
 		return
 	end
 
@@ -771,6 +795,10 @@ local function UpdateMotor6Ds()
 	if CurrentMovementMode ~= "Motor6D"
 		or not MovementEnabled
 	then
+		return
+	end
+
+	if not ShouldUpdateCosmetics() then
 		return
 	end
 
@@ -962,14 +990,16 @@ local function ResimulateHit(
 			casts_CastVariant[id]
 		)
 
-		QueueVisualizeSegment(
-			id,
-			CFrame.new(
-				subPosition,
-				subPosition + subVelocity
-			),
-			true
-		)
+		if casts_VisualizeCasts[id] then
+			QueueVisualizeSegment(
+				id,
+				CFrame.new(
+					subPosition,
+					subPosition + subVelocity
+				),
+				true
+			)
+		end
 
 		if not subResult then
 			continue
@@ -1053,23 +1083,21 @@ local function SimulateCast(
 
 	local currentTime = casts_TotalRunTime[id] - trajectory.StartTime
 
-	local currentPoint = GetPositionAtTime(
-		currentTime,
-		origin,
-		initialVelocity,
-		acceleration
-	)
-
 	local velocity = GetVelocityAtTime(
 		currentTime,
 		initialVelocity,
 		acceleration
 	)
 
-	local displacement = currentPoint - lastPoint
-	
-	if displacement.Magnitude <= EPSILON then
-		casts_DistanceCovered[id] += displacement.Magnitude
+	-- p(t1)-p(t0) = (v0 + a*(t0+t1)/2)*(t1-t0).
+	-- Avoid a second position evaluation and cancellation of large world
+	-- coordinates. Use the actual elapsed interval after runtime rounding.
+	local displacement = (initialVelocity + acceleration * ((previousTime + currentTime) * 0.5))
+		* (currentTime - previousTime)
+	local displacementMagnitude = displacement.Magnitude
+
+	if displacementMagnitude <= EPSILON then
+		casts_DistanceCovered[id] += displacementMagnitude
 		return
 	end
 
@@ -1084,51 +1112,39 @@ local function SimulateCast(
 		variant
 	)
 
-	local hitPoint = result
-		and result.Position
-		or currentPoint
-
-	local rayDisplacement = (hitPoint - lastPoint).Magnitude
+	local rayDisplacement = if result
+		then (result.Position - lastPoint).Magnitude
+		else displacementMagnitude
 
 	casts_RayDisplacement[id] = rayDisplacement
 
-	-- Update cosmetic transform.
-	local direction = displacement
-
-	casts_CFrame[id] =
-		(
-			if direction ~= Vector3.zero
-			then CFrame.new(
-				lastPoint,
-				lastPoint + direction
-			)
-			else CFrame.new(lastPoint)
-		)
-		* CFrame.new(
-			0,
-			0,
-			-rayDisplacement / 2
-		)
-
-	QueueEvent(
-		id,
-		EVT_LENGTH_CHANGED,
-		lastPoint,
-		if direction ~= Vector3.zero then direction.Unit else direction,
-		rayDisplacement,
-		velocity,
-		rayInfo.CosmeticBulletObject
+	-- Build the midpoint transform directly instead of multiplying two
+	-- CFrames. lookAlong avoids losing direction when origin + direction
+	-- rounds back to origin at large world coordinates.
+	local unitDirection = displacement / displacementMagnitude
+	casts_CFrame[id] = CFrame.lookAlong(
+		lastPoint + unitDirection * (rayDisplacement * 0.5),
+		unitDirection
 	)
+
+	if casts_WantLengthChanged[id] then
+		QueueEvent(
+			id,
+			EVT_LENGTH_CHANGED,
+			lastPoint,
+			unitDirection,
+			rayDisplacement,
+			velocity,
+			rayInfo.CosmeticBulletObject
+		)
+	end
 
 	casts_DistanceCovered[id] += rayDisplacement
 
-	if delta > 0 then
+	if delta > 0 and casts_VisualizeCasts[id] then
 		QueueVisualizeSegment(
 			id,
-			CFrame.new(
-				lastPoint,
-				lastPoint + direction
-			),
+			CFrame.lookAlong(lastPoint, unitDirection),
 			false
 		)
 	end
@@ -1427,6 +1443,25 @@ function ParallelSimulation_Register(cast: any)
 		casts_FastCastEvents[id] = nil
 	end
 
+	local eventConfig = casts_FastCastEventsConfig[id]
+	local moduleConfig = casts_FastCastEventsModuleConfig[id]
+	local moduleEvents = casts_FastCastEvents[id]
+
+	casts_WantLengthChanged[id] =
+		(eventConfig ~= nil and eventConfig.UseLengthChanged == true)
+		or (
+			moduleConfig ~= nil
+			and moduleConfig.UseLengthChanged == true
+			and moduleEvents ~= nil
+			and moduleEvents.LengthChanged ~= nil
+		)
+
+	local hasCosmetic = cast.RayInfo.CosmeticBulletObject ~= nil
+	casts_HasCosmetic[id] = hasCosmetic
+	if hasCosmetic then
+		castsWithCosmetics += 1
+	end
+
 	local trajectory = casts_Trajectory[id]
 
 	local position = GetPositionAtTime(
@@ -1470,6 +1505,12 @@ function ParallelSimulation_Unregister(castID: number)
 	casts_FastCastEventsModuleConfig[castID] = nil
 	casts_FastCastEventsConfig[castID] = nil
 	casts_FastCastEvents[castID] = nil
+
+	casts_WantLengthChanged[castID] = nil
+	if casts_HasCosmetic[castID] then
+		castsWithCosmetics -= 1
+	end
+	casts_HasCosmetic[castID] = nil
 
 	casts_VisualizeCasts[castID] = nil
 	casts_VisualizeCastSettings[castID] = nil
@@ -1642,6 +1683,17 @@ function ParallelSimulation.Init(baseCastRef: any)
 
 	BaseCastRef = baseCastRef
 	ActivesRef = baseCastRef.Actives
+
+	-- Stagger each worker's cosmetic update phase so the workers do not all
+	-- call BulkMoveTo on the same frame (which produces heavy spikes).
+	local interval = Config.CosmeticUpdateInterval or 1
+	if interval > 1 and baseCastRef.Actor then
+		local workerIndex = baseCastRef.Actor:GetAttribute("FastCastWorkerIndex")
+
+		if type(workerIndex) == "number" then
+			cosmeticFrame = workerIndex % interval
+		end
+	end
 end
 
 function ParallelSimulation.Register(cast: any)
@@ -1664,13 +1716,24 @@ function ParallelSimulation.Start()
 		warn("[FastCast2] ParallelSimulation already started.")
 		return
 	end
-	--[[
-		You can edit Hz60, Hz30, Hz15, Hz7_5, Hz5, Hz3, Hz1 here, if you want
-	]]
-	ParallelSimulation.Connection = RS:BindToSimulation(function(dt)
-		task.desynchronize()
-		UpdateCasts(dt)
-	end, Enum.StepFrequency.Hz60)
+
+	if Config.SimulationMode == "Fixed" then
+		-- Fixed timestep: the engine may run several steps per frame to keep
+		-- up at this frequency, which multiplies work when the FPS is low.
+		ParallelSimulation.Connection = RS:BindToSimulation(function(dt)
+			task.desynchronize()
+			UpdateCasts(dt)
+		end, Config.FixedSimulationFrequency)
+	else
+		-- One step per frame. `UpdateCasts` synchronizes before main-thread work.
+		if RS:IsClient() then
+			ParallelSimulation.Connection =
+				RS.PreSimulation:ConnectParallel(UpdateCasts)
+		else
+			ParallelSimulation.Connection =
+				RS.Heartbeat:ConnectParallel(UpdateCasts)
+		end
+	end
 end
 
 function ParallelSimulation.Stop()

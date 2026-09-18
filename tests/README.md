@@ -38,6 +38,9 @@ Example: `npm test -- --no-upload`
 
 ## What runs
 
+For focused buffer/math regressions and optional direct simulation A/B timing,
+see [the hot-path runner](hotpaths/README.md) (`npm run test:hotpaths`).
+
 - **Functional tests** (`tests/src/FunctionalTests.luau`) follow the checklist
   in [`TESTS.md`](../TESTS.md): initialization, raycast/blockcast/spherecast
   firing, every public event, ObjectCache, movement modes, cast manipulation,
