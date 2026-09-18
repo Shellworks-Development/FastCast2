@@ -351,6 +351,19 @@ local function GetEvent(): QueuedEvent
 	return eventPool[eventPoolCount]
 end
 
+-- Pooled records for the worker -> main event batch.
+-- Layout: { eventType, cast, args, argCount }
+local batchPool: { { any } } = {}
+local batchPoolCount: number = 0
+
+local function GetBatchRecord(): { any }
+	batchPoolCount += 1
+	if batchPoolCount > #batchPool then
+		batchPool[batchPoolCount] = { 0, false, false, 0 }
+	end
+	return batchPool[batchPoolCount]
+end
+
 local visPool: { QueuedVis } = {}
 local visPoolCount: number = 0
 
@@ -392,6 +405,7 @@ end
 local function ResetPools()
 	argsPoolCount = 0
 	eventPoolCount = 0
+	batchPoolCount = 0
 	visPoolCount = 0
 	hitVisPoolCount = 0
 	segVisPoolCount = 0
@@ -545,15 +559,23 @@ local function QueueEvent(
 	entry[1] = castID
 	entry[2] = eventType
 	entry[3] = args
+	entry[4] = n
 	queuedEvents[queuedEventsCount] = entry
 end
 
 local function FireQueuedEvents()
+	-- Events are collected into a single per-frame batch so the worker only
+	-- crosses the Actor boundary once per frame instead of once per event.
+	local batch: { any } = {}
+	local batchCount = 0
+	local batchCaster: any = nil
+
 	for i = 1, queuedEventsCount do
 		local entry = queuedEvents[i]
 		local castID = entry[1] :: number
 		local numericType = entry[2] :: number
 		local args = entry[3] :: { any }
+		local argCount = entry[4] :: number
 
 		local cast = ActivesRef[castID]
 
@@ -575,15 +597,14 @@ local function FireQueuedEvents()
 			local cosmetic = args[5]
 
 			if eventConfig and eventConfig.UseLengthChanged then
-				caster.Output:Fire(
-					"LengthChanged",
-					cast,
-					lastPoint,
-					rayDirection,
-					displacement,
-					velocity,
-					cosmetic
-				)
+				batchCount += 1
+				local record = GetBatchRecord()
+				record[1] = EVT_LENGTH_CHANGED
+				record[2] = cast
+				record[3] = args
+				record[4] = argCount
+				batch[batchCount] = record
+				batchCaster = caster
 			end
 
 			if moduleConfig
@@ -607,13 +628,14 @@ local function FireQueuedEvents()
 			local cosmetic = args[3]
 
 			if eventConfig and eventConfig.UseHit then
-				caster.Output:Fire(
-					"Hit",
-					cast,
-					result,
-					velocity,
-					cosmetic
-				)
+				batchCount += 1
+				local record = GetBatchRecord()
+				record[1] = EVT_HIT
+				record[2] = cast
+				record[3] = args
+				record[4] = argCount
+				batch[batchCount] = record
+				batchCaster = caster
 			end
 
 			if moduleConfig
@@ -635,13 +657,14 @@ local function FireQueuedEvents()
 			local cosmetic = args[3]
 
 			if eventConfig and eventConfig.UsePierced then
-				caster.Output:Fire(
-					"Pierced",
-					cast,
-					result,
-					velocity,
-					cosmetic
-				)
+				batchCount += 1
+				local record = GetBatchRecord()
+				record[1] = EVT_PIERCED
+				record[2] = cast
+				record[3] = args
+				record[4] = argCount
+				batch[batchCount] = record
+				batchCaster = caster
 			end
 
 			if moduleConfig
@@ -669,10 +692,14 @@ local function FireQueuedEvents()
 			if eventConfig
 				and eventConfig.UseCastTerminating
 			then
-				caster.Output:Fire(
-					"CastTerminating",
-					cast
-				)
+				batchCount += 1
+				local record = GetBatchRecord()
+				record[1] = EVT_CAST_TERMINATING
+				record[2] = cast
+				record[3] = false
+				record[4] = 0
+				batch[batchCount] = record
+				batchCaster = caster
 			end
 
 			if callback then
@@ -695,6 +722,10 @@ local function FireQueuedEvents()
 			ActivesRef[castID] = nil
 			ParallelSimulation_Unregister(castID)
 		end
+	end
+
+	if batchCount > 0 then
+		batchCaster.Output:Fire("Batch", batch)
 	end
 end
 

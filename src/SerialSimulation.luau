@@ -137,7 +137,7 @@ local BaseCastRef: any = nil
 local CurrentMovementMode: "BulkMoveTo" | "Motor6D" = "BulkMoveTo"
 local MovementEnabled = false
 
-local FastCastEvents = {} :: {[number]: (any) -> ()}
+local FastCastEvents = {} :: any
 
 -- ============================================================================
 -- Math
@@ -575,7 +575,7 @@ local function FireQueuedEvents()
 			if eventConfig.UseLengthChanged then
 				local lengthChanged = FastCastEvents.LengthChanged
 				if lengthChanged then
-					lengthChanged(
+					lengthChanged:Fire(
 						cast,
 						args[1],
 						args[2],
@@ -590,7 +590,7 @@ local function FireQueuedEvents()
 			if eventConfig.UseHit then
 				local Hit = FastCastEvents.Hit
 				if Hit then
-					Hit(
+					Hit:Fire(
 						cast,
 						args[1],
 						args[2],
@@ -603,7 +603,7 @@ local function FireQueuedEvents()
 			if eventConfig.UsePierced then
 				local Pierced = FastCastEvents.Pierced
 				if Pierced then
-					Pierced(
+					Pierced:Fire(
 						cast,
 						args[1],
 						args[2],
@@ -618,7 +618,7 @@ local function FireQueuedEvents()
 				local castTerminating = FastCastEvents.CastTerminating
 				--local eventConfig = cast.StateInfo and cast.StateInfo.FastCastEventsConfig
 				if eventConfig.UseCastTerminating and castTerminating then
-					castTerminating(cast)
+					castTerminating:Fire(cast)
 				end
 			end
 			BaseCastRef._TerminateCast(castID)
@@ -1480,7 +1480,7 @@ local SerialSimulation = {}
 
 SerialSimulation.Connection = nil :: RBXScriptConnection?
 
-function SerialSimulation.Init(baseCastRef: any, Actives: any, events: TypeDef.FastCastEvents)
+function SerialSimulation.Init(baseCastRef: any, Actives: any, events: TypeDef.FastCastSignalEvents)
 	if ActivesRef ~= nil then
 		warn(
 			"[FastCast2] SerialSimulation already initialized. Skipping."
@@ -1532,15 +1532,7 @@ function SerialSimulation.Stop()
 	ActivesRef = nil
 end
 
-function SerialSimulation._UpdateEvent(name: string, newEventfn: (any) -> ())
-	if type(newEventfn) ~= "function" then
-		return
-	end
-
-	FastCastEvents[name] = newEventfn
-end
-
-function SerialSimulation.GetEvent(name: string): ((any) -> ())?
+function SerialSimulation.GetEvent(name: string): any
 	return FastCastEvents[name]
 end
 

@@ -57,6 +57,7 @@
 --local BaseCast = script:WaitForChild("BaseCast")
 
 -- Requires
+local Signal = require(script:WaitForChild("Signal"))
 local TypeDef = require(script:WaitForChild("TypeDefinitions"))
 local DefaultConfigs = require(script:WaitForChild("DefaultConfigs"))
 local BaseCastSerial = require(script:WaitForChild("BaseCastSerial"))
@@ -67,6 +68,7 @@ local Dispatcher = require(DispatcherModule)
 -- Type Exports
 export type FastCastEventsModule = TypeDef.FastCastEventsModule
 export type FastCastEvents = TypeDef.FastCastEvents
+export type FastCastSignalEvents = TypeDef.FastCastSignalEvents
 
 export type CanPierceFunction = TypeDef.CanPierceFunction
 export type OnHitFunction = TypeDef.OnHitFunction
@@ -101,14 +103,153 @@ type vaildcast = TypeDef.ActiveCastData | TypeDef.ActiveBlockcastData | TypeDef.
 -- CONSTANTS
 local DEFAULT_CACHE_SIZE = 500
 local DEFAULT_CACHE_HOLDER = workspace
-local VALID_EVENTS = {
+
+-- Events exposed on a Caster as a Signal. Assigning a function to one of these
+-- names is equivalent to connecting that function to the underlying Signal.
+local SIGNAL_EVENTS = {
 	["CastFire"] = true,
 	["CastTerminating"] = true,
 	["Hit"] = true,
 	["Pierced"] = true,
-	["LengthChanged"] = true,
+	["LengthChanged"] = true
+}
+
+-- CanPierce is a query (it has to return a boolean), so it stays a plain function.
+local QUERY_EVENTS = {
 	["CanPierce"] = true
 }
+
+-- Mirrors the EVT_* numeric constants in ParallelSimulation. Parallel workers
+-- send one "Batch" message per frame containing records tagged with these IDs;
+-- the main thread demuxes them back into the Caster's signals.
+local OUTPUT_EVENT_NAMES = {
+	[1] = "LengthChanged",
+	[2] = "Hit",
+	[3] = "Pierced",
+	[4] = "CastTerminating"
+}
+
+local function NewCasterSignals()
+	return {
+		CastFire = Signal.new(),
+		CastTerminating = Signal.new(),
+		Hit = Signal.new(),
+		Pierced = Signal.new(),
+		LengthChanged = Signal.new()
+	}
+end
+
+local function DestroyCasterSignals(self)
+	local legacy = rawget(self, "_legacy")
+	if legacy then
+		for _, connection in legacy do
+			connection:Disconnect()
+		end
+		rawset(self, "_legacy", nil)
+	end
+
+	local events = rawget(self, "_events")
+	if events then
+		for _, signal in events do
+			signal:Destroy()
+		end
+		rawset(self, "_events", nil)
+	end
+
+	rawset(self, "CanPierce", nil)
+end
+
+local function IndexCaster(self, key)
+	local events = rawget(self, "_events")
+	if events then
+		local signal = events[key]
+		if signal ~= nil then
+			return signal
+		end
+	end
+
+	local mt = getmetatable(self)
+	if mt then
+		return mt[key]
+	end
+	return nil
+end
+
+local function NewIndexCaster(self, key, value)
+	if SIGNAL_EVENTS[key] then
+		local events = rawget(self, "_events")
+		if not events then
+			events = NewCasterSignals()
+			rawset(self, "_events", events)
+		end
+
+		if type(value) == "function" then
+			-- Backwards compatible assignment: connect the function, replacing
+			-- any previous function assigned this way.
+			local legacy = rawget(self, "_legacy")
+			if not legacy then
+				legacy = {}
+				rawset(self, "_legacy", legacy)
+			end
+
+			local previous = legacy[key]
+			if previous then
+				previous:Disconnect()
+			end
+
+			legacy[key] = events[key]:Connect(value)
+		elseif Signal.is(value) then
+			local legacy = rawget(self, "_legacy")
+			if legacy and legacy[key] then
+				legacy[key]:Disconnect()
+				legacy[key] = nil
+			end
+
+			events[key] = value
+		elseif value == nil then
+			local legacy = rawget(self, "_legacy")
+			if legacy and legacy[key] then
+				legacy[key]:Disconnect()
+				legacy[key] = nil
+			end
+		else
+			warn("[FastCast2] Cannot set event '" .. tostring(key) .. "', expected a function or Signal")
+		end
+		return
+	end
+
+	if QUERY_EVENTS[key] then
+		if value == nil or type(value) == "function" then
+			rawset(self, key, value)
+		else
+			warn("[FastCast2] Cannot set CanPierce, expected a function")
+		end
+		return
+	end
+
+	rawset(self, key, value)
+end
+
+-- Demux a batch of worker events (see ParallelSimulation.FireQueuedEvents).
+-- Record layout: { eventType, cast, args, argCount }
+local function DispatchOutputBatch(self, batch)
+	for i = 1, #batch do
+		local record = batch[i]
+		local signalName = OUTPUT_EVENT_NAMES[record[1]]
+
+		if signalName then
+			local signal = self[signalName]
+			if Signal.is(signal) then
+				local argCount = record[4]
+				if argCount > 0 then
+					signal:Fire(record[2], table.unpack(record[3], 1, argCount))
+				else
+					signal:Fire(record[2])
+				end
+			end
+		end
+	end
+end
 
 --[=[
 	@class FastCast
@@ -146,25 +287,12 @@ If true, verbose debug logging will be used,
 	printing detailed information about what's going on during processing to the output.
 ]]
 
-FastCastSerial.__index = FastCastSerial
-FastCastSerial.__newindex = function(self, key, value)
-	if VALID_EVENTS[key] then
-		if type(value) == "function" then
-			if self.BaseCast then
-				self.BaseCast._UpdateEvents(key, value)
-			else
-				rawset(self, key, value)
-			end
-		else
-			warn("Cannot set event, not a function")
-		end
-	else
-		rawset(self, key, value)
-	end
-end
+FastCastSerial.__index = IndexCaster
+FastCastSerial.__newindex = NewIndexCaster
 FastCastSerial.__type = "FastCastSerial"
 
-FastCastParallel.__index = FastCastParallel
+FastCastParallel.__index = IndexCaster
+FastCastParallel.__newindex = NewIndexCaster
 FastCastParallel.__type = "FastCastParallel"
 
 -- Local functions
@@ -306,14 +434,15 @@ function FastCastParallel:Init(
 		},
 		FastCastModule = script
 	}
-	self.Dispatcher = newDispatcher.new(numWorkers, data, function(signalName: string, ...)
-		local f = self[signalName]
-		if not f then
+	self.Dispatcher = newDispatcher.new(numWorkers, data, function(eventName: string, ...)
+		if eventName == "Batch" then
+			DispatchOutputBatch(self, ...)
 			return
 		end
 
-		if type(f) == "function" then
-			f(...)
+		local signal = self[eventName]
+		if Signal.is(signal) then
+			signal:Fire(...)
 		end
 	end)
 
@@ -507,7 +636,7 @@ function FastCastSerial:Init(
 		}
 	}
 
-	local events: TypeDef.FastCastEvents = {
+	local events: TypeDef.FastCastSignalEvents = {
 		CastFire = self.CastFire,
 		Pierced = self.Pierced,
 		Hit = self.Hit,
@@ -627,16 +756,10 @@ function FastCastSerial:Destroy()
 	if getmetatable(self) ~= FastCastSerial then
 		return
 	end
-	setmetatable(self, nil)
-	
-	BaseCastSerial.Destroy()
 
-	self.LengthChanged = nil
-	self.Hit = nil
-	self.Pierced = nil
-	self.CanPierce = nil
-	self.CastTerminating = nil
-	self.CastFire = nil
+	BaseCastSerial.Destroy()
+	DestroyCasterSignals(self)
+	setmetatable(self, nil)
 
 	self.Destroy = function() end
 end
@@ -651,15 +774,11 @@ function FastCastParallel:Destroy()
 		return
 	end
 
-	self.LengthChanged = nil
-	self.Hit = nil
-	self.Pierced = nil
-	self.CastTerminating = nil
-	self.CastFire = nil
-
 	if self.Dispatcher then
 		self.Dispatcher:Destroy()
 	end
+
+	DestroyCasterSignals(self)
 	self.Destroy = function() end
 	setmetatable(self, nil)
 end
@@ -832,7 +951,7 @@ function FastCast:TerminateCast(cast: vaildcast)
 		if eventsCfg and eventsCfg.UseCastTerminating then
 			local castTerminating = SerialSimulation.GetEvent("CastTerminating")
 			if castTerminating then
-				castTerminating(cast)
+				castTerminating:Fire(cast)
 			end
 		end
 		SerialSimulation.QueueEvent(cast.ID, "CastTerminating")
@@ -861,12 +980,7 @@ end
 ]=]
 function FastCast.new()
 	local fs = {
-		LengthChanged = nil,
-		Hit = nil,
-		Pierced = nil,
-		CanPierce = nil,
-		CastTerminating = nil,
-		CastFire = nil,
+		_events = NewCasterSignals(),
 		WorldRoot = workspace,
 	}
 	setmetatable(fs, FastCastSerial)
@@ -888,11 +1002,7 @@ end
 ]=]
 function FastCast.newParallel()
 	local fp = {
-		LengthChanged = nil,
-		Hit = nil,
-		Pierced = nil,
-		CastTerminating = nil,
-		CastFire = nil,
+		_events = NewCasterSignals(),
 		WorldRoot = workspace,
 		Dispatcher = nil,
 		AlreadyInit = false
