@@ -2,9 +2,24 @@
 --!optimize 2
 local storage = game:GetService("ReplicatedStorage")
 local modules = storage.Modules
+local Signal = require(modules.Signal)
 
 local function near(a, b, tolerance)
 	assert((a - b).Magnitude <= tolerance, tostring(a) .. " ~= " .. tostring(b))
+end
+
+-- Simulation events are Signals; wrap plain handler functions so the harness
+-- stays readable.
+local function makeEvents(handlers: { [string]: ((...any) -> ())? }): { [string]: any }
+	local events = {}
+	for name, handler in handlers do
+		local signal = Signal.new()
+		if handler then
+			signal:Connect(handler)
+		end
+		events[name] = signal
+	end
+	return events
 end
 
 local function queueTests(simulation)
@@ -75,12 +90,12 @@ local function correctness()
 	local origin, velocity, acceleration = Vector3.new(10, 20, 30), Vector3.new(80, 90, -100), Vector3.new(0, -196.2, 0)
 	local observedOrigin, observedDirection, observedVelocity
 	local callbacks = 0
-	local actives = setup(sim, 600, {
+	local actives = setup(sim, 600, makeEvents({
 		LengthChanged = function(_, _, _, _, v)
 			callbacks += 1
 			observedVelocity = v
 		end,
-	}, {
+	}), {
 		Raycast = function(_, o, d)
 			observedOrigin, observedDirection = o, d
 		end,
@@ -142,12 +157,12 @@ local function collisionTests()
 	for _, kind in { "Raycast", "Blockcast", "Spherecast" } do
 		local sim = fresh("Optimized")
 		local hits = 0
-		local casts = setup(sim, 96, {
+		local casts = setup(sim, 96, makeEvents({
 			Hit = function(_, result)
 				assert(result.Instance == wall, "wrong collision target")
 				hits += 1
 			end,
-		}, workspace, Vector3.new(0, 10000, 0), Vector3.new(0, 0, -120), Vector3.zero)
+		}), workspace, Vector3.new(0, 10000, 0), Vector3.new(0, 0, -120), Vector3.zero)
 		local random = Random.new(42)
 		for _, cast in casts do
 			cast.StateInfo.Trajectory.Origin += Vector3.new(0, 0, random:NextNumber(-5, 5))
@@ -176,7 +191,7 @@ local function benchmark()
 			setup(
 				sim,
 				6000,
-				if withEvents then { LengthChanged = function() end } else {},
+				if withEvents then makeEvents({ LengthChanged = function() end }) else makeEvents({}),
 				workspace,
 				Vector3.new(0, 100000, 0),
 				Vector3.new(100, 10, -50),

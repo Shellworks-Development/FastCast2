@@ -96,7 +96,7 @@ function BaseCast.Raycast(
 	Actives[cast.ID] = cast
 
 	if Behavior.FastCastEventsConfig.UseCastFire and CastFirefn then
-		CastFirefn(cast, Origin, Direction, Velocity, Behavior)
+		CastFirefn:Fire(cast, Origin, Direction, Velocity, Behavior)
 	end
 end
 
@@ -132,7 +132,7 @@ function BaseCast.Blockcast(
 	Actives[cast.ID] = cast
 
 	if Behavior.FastCastEventsConfig.UseCastFire and CastFirefn then
-		CastFirefn(cast, Origin, Direction, Velocity, Behavior)
+		CastFirefn:Fire(cast, Origin, Direction, Velocity, Behavior)
 	end
 end
 
@@ -168,7 +168,7 @@ function BaseCast.Spherecast(
 	Actives[cast.ID] = cast
 
 	if Behavior.FastCastEventsConfig.UseCastFire and CastFirefn then
-		CastFirefn(cast, Origin, Direction, Velocity, Behavior)
+		CastFirefn:Fire(cast, Origin, Direction, Velocity, Behavior)
 	end
 end
 
@@ -292,14 +292,6 @@ function BaseCast._ReturnMotor6D(motor6d: Motor6D?)
 	if Motor6DCacheInstance then
 		Motor6DCacheInstance:Disconnect(motor6d)
 	end
-end
-
-function BaseCast._UpdateEvents(eventName: string, newEventfn: (...any) -> ())
-	if eventName == "CastFire" then 
-		CastFirefn = newEventfn
-		return
-	end
-	SerialSimulation._UpdateEvent(eventName, newEventfn)
 end
 
 return BaseCast

@@ -262,6 +262,45 @@ return function()
 				arena:Destroy()
 			end)
 
+			test("events are Signals that support multiple listeners and Disconnect", function(expect)
+				local arena = createArena()
+				local wall = createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+
+				local firstCount = 0
+				local secondCount = 0
+
+				local caster = FastCast.new()
+				local firstConnection = caster.Hit:Connect(function(_, result)
+					if result.Instance == wall then
+						firstCount += 1
+					end
+				end)
+				caster.Hit:Connect(function(_, result)
+					if result.Instance == wall then
+						secondCount += 1
+					end
+				end)
+				caster:Init("BulkMoveTo")
+
+				-- A disconnected listener must not receive the event.
+				firstConnection:Disconnect()
+
+				fire(caster, "Raycast", Vector3.new(0, 0, 0), Vector3.new(0, 0, -1), 120, behavior)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return secondCount > 0
+					end, HIT_TIMEOUT),
+					"connected Signal listener never fired"
+				)
+				expect.equal(firstCount, 0, "disconnected Signal listener still fired")
+
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
 			test("Pierced and CanPierce run when a cast is allowed through", function(expect)
 				local arena = createArena()
 				local container = createContainer(arena)
@@ -482,6 +521,40 @@ return function()
 				)
 
 				connection:Disconnect()
+				caster:Destroy()
+				arena:Destroy()
+			end)
+
+			test("events are Signals that support multiple listeners", function(expect)
+				local arena = createArena()
+				local wall = createWall(arena, Vector3.new(0, 0, -40), Vector3.new(50, 50, 2))
+				local container = createContainer(arena)
+				local behavior = makeBehavior(container)
+
+				local firstCount = 0
+				local secondCount = 0
+
+				local caster = createParallelCaster()
+				caster.Hit:Connect(function(_, result)
+					if result.Instance == wall then
+						firstCount += 1
+					end
+				end)
+				caster.Hit:Connect(function(_, result)
+					if result.Instance == wall then
+						secondCount += 1
+					end
+				end)
+
+				fire(caster, "Raycast", Vector3.new(0, 0, 0), Vector3.new(0, 0, -1), 120, behavior)
+
+				expect.truthy(
+					Framework.waitFor(function()
+						return firstCount > 0 and secondCount > 0
+					end, HIT_TIMEOUT),
+					"parallel Signal listeners never fired"
+				)
+
 				caster:Destroy()
 				arena:Destroy()
 			end)

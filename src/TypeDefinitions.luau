@@ -14,6 +14,7 @@
 ]=]
 
 local Dispatcher = require(script.Parent:WaitForChild("FastCastVMs"))
+local Signal = require(script.Parent:WaitForChild("Signal"))
 
 --[=[
 	@type vaildcast ActiveCastData | ActiveBlockcastData | ActiveSpherecastData
@@ -45,6 +46,22 @@ export type FastCastEvents = {
 	LengthChanged: OnLengthChangedFunction,
 	CastTerminating: OnCastTerminatingFunction,
 	CastFire: OnCastFireFunction
+}
+
+--[=[
+	@type FastCastSignalEvents { CanPierce: CanPierceFunction, Hit: Signal.Signal<OnHitFunction>, Pierced: Signal.Signal<OnPiercedFunction>, LengthChanged: Signal.Signal<OnLengthChangedFunction>, CastTerminating: Signal.Signal<OnCastTerminatingFunction>, CastFire: Signal.Signal<OnCastFireFunction> }
+	@within TypeDefinitions
+
+	The Signal-based event table used internally by SerialSimulation. Each event
+	is a Signal so any number of listeners can connect to it.
+]=]
+export type FastCastSignalEvents = {
+	CanPierce: CanPierceFunction,
+	Hit: Signal.Signal<OnHitFunction>,
+	Pierced: Signal.Signal<OnPiercedFunction>,
+	LengthChanged: Signal.Signal<OnLengthChangedFunction>,
+	CastTerminating: Signal.Signal<OnCastTerminatingFunction>,
+	CastFire: Signal.Signal<OnCastFireFunction>
 }
 
 --[=[
@@ -157,11 +174,11 @@ export type VisualizeCastSettings = {
 ]=]
 export type CasterParallel = {
 	WorldRoot: WorldRoot,
-	LengthChanged: OnLengthChangedFunction,
-	Hit: OnHitFunction,
-	Pierced: OnPiercedFunction,
-	CastTerminating: OnCastTerminatingFunction,
-	CastFire: OnCastFireFunction,
+	LengthChanged: Signal.Signal<OnLengthChangedFunction> | OnLengthChangedFunction,
+	Hit: Signal.Signal<OnHitFunction> | OnHitFunction,
+	Pierced: Signal.Signal<OnPiercedFunction> | OnPiercedFunction,
+	CastTerminating: Signal.Signal<OnCastTerminatingFunction> | OnCastTerminatingFunction,
+	CastFire: Signal.Signal<OnCastFireFunction> | OnCastFireFunction,
 	Dispatcher: Dispatcher.Dispatcher,
 
 	AlreadyInit: boolean,
@@ -252,12 +269,12 @@ export type CasterParallel = {
 ]=]
 export type CasterSerial = {
 	WorldRoot: WorldRoot,
-	LengthChanged: OnLengthChangedFunction,
-	Hit: OnHitFunction,
+	LengthChanged: Signal.Signal<OnLengthChangedFunction> | OnLengthChangedFunction,
+	Hit: Signal.Signal<OnHitFunction> | OnHitFunction,
 	CanPierce: CanPierceFunction,
-	Pierced: OnPiercedFunction,
-	CastTerminating: OnCastTerminatingFunction,
-	CastFire: OnCastFireFunction,
+	Pierced: Signal.Signal<OnPiercedFunction> | OnPiercedFunction,
+	CastTerminating: Signal.Signal<OnCastTerminatingFunction> | OnCastTerminatingFunction,
+	CastFire: Signal.Signal<OnCastFireFunction> | OnCastFireFunction,
 	Dispatcher: Dispatcher.Dispatcher,
 
 	AlreadyInit: boolean,
